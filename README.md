@@ -61,6 +61,7 @@ additional terms or conditions.
 - [Test Vectors](https://github.com/cfrg/draft-irtf-cfrg-hash-to-curve)
 - [BLS-12-381 Constant Time Reference](https://eprint.iacr.org/2019/403.pdf)
 - [Talk given by Wahby & Boneh](https://wahby.org/bls-hash-ecc19-talk.pdf)
+- [Riad Wahby C Implementation](https://github.com/kwantam/bls12-381_hash)
 
 [//]: # (badges)
 
