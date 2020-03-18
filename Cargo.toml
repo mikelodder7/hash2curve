@@ -2,7 +2,7 @@
 authors = ["Michael Lodder <redmike7@gmail.com>"]
 categories = ["cryptography", "elliptic curves", "hash"]
 description = "A suite of hash to curve ECC algorithms"
-documentation = "https://docs.rs/hash2curve
+documentation = "https://docs.rs/hash2curve"
 edition = "2018"
 include = [
     "src/**.rs",
@@ -17,7 +17,7 @@ include = [
 license = "Apache-2.0"
 name = "hash2curve"
 readme = "README.md"
-repository = "https://github.com/mikelodder7/hash2curve
+repository = "https://github.com/mikelodder7/hash2curve"
 version = "0.0.1"
 
 [lib]
@@ -32,7 +32,7 @@ lto = true
 
 [features]
 default = []
-bls = ["amcl_wrapper"]
+bls = ["amcl_wrapper", "digest"]
 
 [dependencies]
 amcl_wrapper = { version = "0.3.5", features = ["bls381"], optional = true }
