@@ -30,4 +30,10 @@ maintenance = { status = "experimental" }
 [profile.release]
 lto = true
 
+[features]
+default = []
+bls = ["amcl_wrapper"]
+
 [dependencies]
+amcl_wrapper = { version = "0.3.5", features = ["bls381"], optional = true }
+digest = { version = "0.8.1", optional = true }
