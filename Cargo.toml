@@ -1,0 +1,33 @@
+[package]
+authors = ["Michael Lodder <redmike7@gmail.com>"]
+categories = ["cryptography", "elliptic curves", "hash"]
+description = "A suite of hash to curve ECC algorithms"
+documentation = "https://docs.rs/hash2curve
+edition = "2018"
+include = [
+    "src/**.rs",
+    "Cargo.toml",
+    "CHANGELOG",
+    "CODEOWNERS",
+    "CONTRIBUTING",
+    "LICENSE",
+    "README.md",
+    "RELEASES"
+]
+license = "Apache-2.0"
+name = "hash2curve"
+readme = "README.md"
+repository = "https://github.com/mikelodder7/hash2curve
+version = "0.0.0"
+
+[lib]
+name = "hash2curve"
+crate-type = ["rlib"]
+
+[badges]
+maintenance = { status = "experimental" }
+
+[profile.release]
+lto = true
+
+[dependencies]
