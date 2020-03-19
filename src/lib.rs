@@ -149,8 +149,16 @@ impl DomainSeparationTag {
 pub trait HashToCurve {
     /// The return type by the underlying hash to curve implementation
     type Output;
-    /// Encodes `data` to a curve point
+    /// Nonuniform encoding.  This function encodes byte
+    /// strings to points in G.  The distribution of the output is not
+    /// uniformly random in G.
     fn encode_to_curve<I: AsRef<[u8]>>(data: I) -> Self::Output;
+
+    /// Random oracle encoding (hash_to_curve).  This function encodes
+    /// byte strings to points in G.  This function is suitable for
+    /// applications requiring a random oracle returning points in G,
+    /// provided that map_to_curve is "well distributed".
+    fn hash_to_curve<I: AsRef<[u8]>>(data: I) -> Self::Output;
 }
 
 /// The maximum number of bytes that can be requested for an expand operation
@@ -172,7 +180,7 @@ where
     if T::to_usize() == 0 {
         return Err(HashingError::from_msg(
             HashingErrorKind::InvalidXmdRequestLength,
-            format!("The requested output cannot be 0"),
+            "The requested output cannot be 0".to_string(),
         ));
     }
 
@@ -202,7 +210,7 @@ where
     if T::to_usize() == 0 {
         return Err(HashingError::from_msg(
             HashingErrorKind::InvalidXmdRequestLength,
-            format!("The requested output cannot be 0"),
+            "The requested output cannot be 0".to_string(),
         ));
     }
     let ell = f64::ceil(T::to_usize() as f64 / 32f64) as usize;
