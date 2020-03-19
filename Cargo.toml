@@ -32,8 +32,13 @@ lto = true
 
 [features]
 default = []
-bls = ["amcl_wrapper", "digest"]
+bls = ["amcl_wrapper"]
 
 [dependencies]
 amcl_wrapper = { version = "0.3.5", features = ["bls381"], optional = true }
-digest = { version = "0.8.1", optional = true }
+digest = "0.8.1"
+failure = "0.1.7"
+subtle = "2.2.2"
+
+[dev-dependencies]
+sha2 = "0.8.1"

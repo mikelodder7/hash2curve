@@ -3,12 +3,12 @@
 //! and Section 5 of
 //!  <https://eprint.iacr.org/2019/403.pdf>
 
-use amcl_wrapper::{
-    constants::{GroupG1_SIZE as G1Size, MODBYTES as FieldElementSize},
-    field_elem::FieldElement,
-    group_elem::GroupElement,
-    group_elem_g1::G1,
-};
+// use amcl_wrapper::{
+// constants::{GroupG1_SIZE as G1Size, MODBYTES as FieldElementSize},
+// field_elem::FieldElement,
+// group_elem::GroupElement,
+// group_elem_g1::G1,
+// };
 
-#[derive(Clone, Debug)]
-pub struct Hash(G1);
+// use digest::{Digest as DigestTrait};
+// use subtle::ConstantTimeEq;
