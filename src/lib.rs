@@ -161,13 +161,20 @@ pub trait HashToCurve {
     fn hash_to_curve<I: AsRef<[u8]>>(data: I) -> Self::Output;
 }
 
+/// A generic struct for computing hash to field as described in
+/// Section 5.2 in <https://datatracker.ietf.org/doc/draft-irtf-cfrg-hash-to-curve/?include_text=1>
+// pub(crate) trait HashToField {
+//     fn hash_to_field()
+// }
+
+
 /// The maximum number of bytes that can be requested for an expand operation
 const MAX_EXPAND_MESSAGE_REQUEST: usize = 255;
 
 /// Implements the `expand_message_xof` as described in section 5.3.2 at
 /// <https://datatracker.ietf.org/doc/draft-irtf-cfrg-hash-to-curve/?include_text=1>
 /// computes hash function `D` from `msg` and the tag
-fn expand_message_xof<M, X, D, T>(
+pub(crate) fn expand_message_xof<M, X, D, T>(
     msg: M,
     dst: &DomainSeparationTag,
 ) -> Result<GenericArray<u8, T>, HashingError>
@@ -188,7 +195,7 @@ where
     dst_prime.insert(0, dst_prime.len() as u8); //I2OSP(len(DST), 1) || DST
     let mut hasher = X::default();
     hasher.input(msg.as_ref());
-    hasher.input(T::to_u16().to_be_bytes()); //I2OSP(len_in_bytes, 2)
+    hasher.input(T::to_u16().to_be_bytes());             //I2OSP(len_in_bytes, 2)
     hasher.input(dst_prime.as_slice());
     let mut result = vec![0u8; T::to_usize()];
     hasher.xof_result().read(result.as_mut_slice());
@@ -198,7 +205,7 @@ where
 /// Implements the `expand_message_xmd` as described in section 5.3.1 at
 /// <https://datatracker.ietf.org/doc/draft-irtf-cfrg-hash-to-curve/?include_text=1>
 /// computes hash function `D` from `msg` and the tag
-fn expand_message_xmd<M, D, T>(
+pub(crate) fn expand_message_xmd<M, D, T>(
     msg: M,
     dst: &DomainSeparationTag,
 ) -> Result<GenericArray<u8, T>, HashingError>
@@ -213,7 +220,7 @@ where
             "The requested output cannot be 0".to_string(),
         ));
     }
-    let ell = f64::ceil(T::to_usize() as f64 / 32f64) as usize;
+    let ell = f64::ceil(T::to_usize() as f64 / D::OutputSize::to_usize() as f64) as usize;
     if ell > MAX_EXPAND_MESSAGE_REQUEST {
         return Err(HashingError::from_msg(
             HashingErrorKind::InvalidXmdRequestLength,
@@ -226,28 +233,28 @@ where
     let mut dst_prime = dst.to_bytes::<D>()?;
     dst_prime.insert(0, dst_prime.len() as u8); //I2OSP(len(DST), 1) || DST
     let mut hasher = D::new();
-    hasher.input(vec![0u8; D::BlockSize::to_usize()]); //z_pad = I2OSP(0, r_in_bytes)
+    hasher.input(vec![0u8; D::BlockSize::to_usize()]);   //z_pad = I2OSP(0, r_in_bytes)
     hasher.input(msg.as_ref());
-    hasher.input(T::to_u16().to_be_bytes()); //l_i_b_str = I2OSP(len_in_bytes, 2)
+    hasher.input(T::to_u16().to_be_bytes());             //l_i_b_str = I2OSP(len_in_bytes, 2)
     hasher.input([0u8]); //I2OSP(0, 1)
     hasher.input(dst_prime.as_slice());
-    let b_0 = hasher.result_reset(); //b_0 = H(Z_pad || msg || l_i_b_str || I2OSP(0, 1) || DST_prime)
+    let b_0 = hasher.result_reset();        //b_0 = H(Z_pad || msg || l_i_b_str || I2OSP(0, 1) || DST_prime)
     hasher.input(b_0);
     hasher.input([1u8]); //I2OSP(1, 1)
     hasher.input(dst_prime.as_slice());
-    let mut b_i = hasher.result_reset(); //b_1 = H(b_0 || I2OSP(1, 1) || DST_prime)
+    let mut b_i = hasher.result_reset();    //b_1 = H(b_0 || I2OSP(1, 1) || DST_prime)
     let mut random_bytes = Vec::new();
     random_bytes.extend_from_slice(b_i.as_slice());
     // Its tempting to terminate early because we only need to loop until enough
     // bytes are in `random_bytes`. However, this wouldn't be CT
-    for i in 2..ell {
+    for i in 1..ell {
         hasher.input(vxor(b_0.as_slice(), b_i.as_slice()).as_slice());
-        hasher.input([i as u8]);
+        hasher.input([(i + 1) as u8]);
         hasher.input(dst_prime.as_slice());
-        b_i = hasher.result_reset(); //b_i = H(strxor(b_0, b_(i - 1)) || I2OSP(i, 1) || DST_prime)
+        b_i = hasher.result_reset();                            //b_i = H(strxor(b_0, b_(i - 1)) || I2OSP(i, 1) || DST_prime)
         random_bytes.extend_from_slice(b_i.as_slice());
     }
-    Ok(GenericArray::from_iter(random_bytes.into_iter().take(ell)))
+    Ok(GenericArray::from_iter(random_bytes.into_iter().take(T::to_usize())))
 }
 
 /// Internal function returns the bitwise XOR of the two strings.

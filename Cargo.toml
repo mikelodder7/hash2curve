@@ -35,7 +35,7 @@ default = []
 bls = ["amcl_wrapper"]
 
 [dependencies]
-amcl_wrapper = { version = "0.3.5", features = ["bls381"], optional = true }
+amcl_wrapper = { version = "0.4", features = ["bls381"], optional = true, git = "https://github.com/mikelodder7/amcl_rust_wrapper.git" }
 digest = "0.8.1"
 failure = "0.1.7"
 subtle = "2.2.2"
