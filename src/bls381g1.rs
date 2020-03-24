@@ -76,6 +76,8 @@ impl HashToCurve for Bls12381G1XmdSha256Sswu {
     }
 }
 
+/// See Section 7 in
+/// <https://datatracker.ietf.org/doc/draft-irtf-cfrg-hash-to-curve/?include_text=1>
 fn clear_cofactor(p: ECP) -> ECP {
     p.mul(&H_EFF)
 }
