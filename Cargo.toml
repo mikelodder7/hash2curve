@@ -32,12 +32,13 @@ lto = true
 
 [features]
 default = []
-bls = ["amcl_wrapper"]
+bls = ["miracl_amcl", "sha2"]
 
 [dependencies]
-amcl_wrapper = { version = "0.4", features = ["bls381"], optional = true, git = "https://github.com/mikelodder7/amcl_rust_wrapper.git" }
+miracl_amcl = { version = "3.2.5", features = ["bls381"], optional = true }
 digest = "0.8.1"
 failure = "0.1.7"
+sha2 = { version = "0.8.1", optional = true }
 subtle = "2.2.2"
 
 [dev-dependencies]

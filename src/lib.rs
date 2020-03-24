@@ -152,21 +152,14 @@ pub trait HashToCurve {
     /// Nonuniform encoding.  This function encodes byte
     /// strings to points in G.  The distribution of the output is not
     /// uniformly random in G.
-    fn encode_to_curve<I: AsRef<[u8]>>(data: I) -> Self::Output;
+    fn encode_to_curve<I: AsRef<[u8]>>(&self, data: I) -> Result<Self::Output, HashingError>;
 
     /// Random oracle encoding (hash_to_curve).  This function encodes
     /// byte strings to points in G.  This function is suitable for
     /// applications requiring a random oracle returning points in G,
     /// provided that map_to_curve is "well distributed".
-    fn hash_to_curve<I: AsRef<[u8]>>(data: I) -> Self::Output;
+    fn hash_to_curve<I: AsRef<[u8]>>(&self, data: I) -> Result<Self::Output, HashingError>;
 }
-
-/// A generic struct for computing hash to field as described in
-/// Section 5.2 in <https://datatracker.ietf.org/doc/draft-irtf-cfrg-hash-to-curve/?include_text=1>
-// pub(crate) trait HashToField {
-//     fn hash_to_field()
-// }
-
 
 /// The maximum number of bytes that can be requested for an expand operation
 const MAX_EXPAND_MESSAGE_REQUEST: usize = 255;
@@ -266,6 +259,8 @@ fn vxor(b1: &[u8], b2: &[u8]) -> Vec<u8> {
     }
     result
 }
+
+mod isogeny;
 
 /// Hashing for BLS12-381 to G1
 #[cfg(feature = "bls")]
