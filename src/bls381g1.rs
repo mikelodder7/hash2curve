@@ -3,18 +3,15 @@
 //! and Section 5 of
 //!  <https://eprint.iacr.org/2019/403.pdf>
 
-
 use crate::{DomainSeparationTag, expand_message_xmd};
 use crate::error::HashingError;
 use crate::isogeny::bls381g1::*;
 use crate::HashToCurve;
-use amcl_miracl::{arch::CHUNK, bls381::{big::BIG, dbig::DBIG, fp::FP, ecp::ECP}};
+use amcl_miracl::bls381::{big::BIG, dbig::DBIG, ecp::ECP};
 use digest::{
     Digest,
     BlockInput,
     generic_array::{
-        GenericArray,
-        ArrayLength,
         typenum::{
             U32,
             U64,
@@ -29,15 +26,13 @@ use std::cmp::Ordering;
 /// L = ceil(ceil(log2(p) + k) / 8). For example, in our case log2(p) = 381, k = 128
 /// L = 64
 type L = U64;
-type TWO_L = U128;
+type TwoL = U128;
 const MODULUS: BIG = BIG { w: amcl_miracl::bls381::rom::MODULUS };
 const PM1DIV2: BIG = BIG { w: [71916856549561685, 108086211381297143, 186063435852751093, 218960087668936289, 225643796693662629, 229680090418738422, 3490221905] };
 const H_EFF: BIG = BIG { w: [144396663052632065, 52, 0, 0, 0, 0, 0] };
 const C1: BIG = BIG { w: [132416828320029820, -36241730206030966, -183175740354038500, -108808289511770161, 19716962043635886, 150180602526288156, 2033276157 ] };
 const C2: BIG = BIG { w: [170292360909944894, 176868607242987704, 7626954141253676, 39810925030715689, 14823383385055774, 15557254971433191, 634585801] };
 const SQRT_C1: BIG = BIG {w: [ 180073616350636715, 198158293766504443, 237146906002231418, 253595231910324016, 112821898346831314, 258955233285225083, 1745110952 ]};
-const C1_PM3D4: BIG = BIG { w: [180073616350636714, 198158293766504443, 237146906002231418, 253595231910324016, 112821898346831314, 258955233285225083, 1745110952] };
-const C2_PM3D4: BIG = BIG { w: [143833713099122040, 216172422762594286, 83896495553790442, 149689799186160835, 163057217235613515, 171129804685765101, 6980443811] };
 
 /// BLS12381G1_XMD:SHA-256_SSWU provides both
 /// Random Oracle (RO)
@@ -65,14 +60,14 @@ impl HashToCurve for Bls12381G1XmdSha256Sswu {
     type Output = ECP;
 
     fn encode_to_curve<I: AsRef<[u8]>>(&self, data: I) -> Result<Self::Output, HashingError> {
-        let u = hash_to_field_xmd_1::<sha2::Sha256, I>(data, &self.dst)?;
+        let u = hash_to_field_xmd_nu::<sha2::Sha256, I>(data, &self.dst)?;
         let q = map_to_curve(u);
         let p = clear_cofactor(q);
         Ok(p)
     }
 
     fn hash_to_curve<I: AsRef<[u8]>>(&self, data: I) -> Result<Self::Output, HashingError> {
-        let (u0, u1) = hash_to_field_xmd_2::<sha2::Sha256, I>(data, &self.dst)?;
+        let (u0, u1) = hash_to_field_xmd_ro::<sha2::Sha256, I>(data, &self.dst)?;
         let mut q0 = map_to_curve(u0);
         let q1 = map_to_curve(u1);
         q0.add(&q1);
@@ -85,15 +80,10 @@ fn clear_cofactor(p: ECP) -> ECP {
     p.mul(&H_EFF)
 }
 
-fn map_to_curve(u: BIG) -> ECP {
-    let (mut x, mut y) = map_to_curve_simple_swu(u);
-    iso_map(x, y)
-}
-
-/// See Section 6.6.2.1 in
+/// See Section 6.2 in
 /// <https://datatracker.ietf.org/doc/draft-irtf-cfrg-hash-to-curve/?include_text=1>
-fn map_to_curve_3mod4(u: BIG) -> ECP {
-    let (mut x, mut y) = map_to_curve_simple_swu_3mod4(u);
+fn map_to_curve(u: BIG) -> ECP {
+    let (x, y) = map_to_curve_simple_swu(u);
     iso_map(x, y)
 }
 
@@ -101,7 +91,7 @@ fn map_to_curve_3mod4(u: BIG) -> ECP {
 /// <https://datatracker.ietf.org/doc/draft-irtf-cfrg-hash-to-curve/?include_text=1>
 fn map_to_curve_simple_swu(u: BIG) -> (BIG, BIG) {
     // tv1 = Z * u^2
-    let mut tv1 = BIG::modmul(&Z, &BIG::modsqr(&u, &MODULUS), &MODULUS);
+    let tv1 = BIG::modmul(&Z, &BIG::modsqr(&u, &MODULUS), &MODULUS);
     // tv2 = tv1^2
     let mut tv2 = BIG::modsqr(&tv1, &MODULUS);
 
@@ -138,13 +128,13 @@ fn map_to_curve_simple_swu(u: BIG) -> (BIG, BIG) {
     gx1.rmod(&MODULUS);
 
     // x2 = tv1 * x1
-    let mut x2 = BIG::modmul(&tv1, &x1, &MODULUS);
+    let x2 = BIG::modmul(&tv1, &x1, &MODULUS);
 
     // tv2 = tv1 * tv2
     tv2 = BIG::modmul(&tv1, &tv2, &MODULUS);
 
     // gx2 = gx1 * tv2
-    let mut gx2 = BIG::modmul(&gx1, &tv2, &MODULUS);
+    let gx2 = BIG::modmul(&gx1, &tv2, &MODULUS);
 
     // e2 = is_square(gx1)
     let e2 = if is_square(&gx1) { 1 } else { 0 };
@@ -158,7 +148,7 @@ fn map_to_curve_simple_swu(u: BIG) -> (BIG, BIG) {
     y2.cmove(&gx1, e2);
 
     // y = sqrt(y2)
-    let mut y = sqrt_3mod4(&y2);
+    let y = sqrt_3mod4(&y2);
 
     // e3 = sgn0(u) == sgn0(y)
     let e3 = if sgn0(&u) == sgn0(&y) { 1 } else { 0 };
@@ -171,7 +161,7 @@ fn map_to_curve_simple_swu(u: BIG) -> (BIG, BIG) {
 }
 
 /// Section F.1 in
-///
+/// <https://datatracker.ietf.org/doc/draft-irtf-cfrg-hash-to-curve/?include_text=1>
 fn sqrt_3mod4(x: &BIG) -> BIG {
     let mut t = BIG::new_big(x);
     t.powmod(&SQRT_C1, &MODULUS)
@@ -187,85 +177,6 @@ fn is_square(x: &BIG) -> bool {
         sum |= t.w[i];
     }
     sum == 0 && (t.w[0] == 0 || t.w[0] == 1)
-}
-
-/// Simplified SWU for AB == 0 as described in Section 6.6.3 in
-/// <https://datatracker.ietf.org/doc/draft-irtf-cfrg-hash-to-curve/?include_text=1>
-fn map_to_curve_simple_swu_3mod4(u: BIG) -> (BIG, BIG) {
-    let mut tv1 = BIG::modsqr(&u, &MODULUS);
-    let mut tv3 = BIG::modmul(&tv1, &Z, &MODULUS);
-    let mut tv2 = BIG::modsqr(&tv3, &MODULUS);
-
-    let mut xd = BIG::new_copy(&tv2);
-    xd.add(&tv3);
-    xd.rmod(&MODULUS);
-
-    let mut x1n = BIG::new_copy(&xd);
-    x1n.inc(1);
-    x1n = BIG::modmul(&ISO_B, &x1n, &MODULUS);
-
-    xd = BIG::modmul(&xd, &BIG::modneg(&ISO_A, &MODULUS), &MODULUS);
-
-    let e1 = if xd.iszilch() { 1 } else { 0 };
-
-    let z_a = BIG::modmul(&Z, &ISO_A, &MODULUS);
-
-    xd.cmove(&z_a, e1);
-
-    tv2 = BIG::modsqr(&xd, &MODULUS);
-
-    let mut gxd = BIG::modmul(&tv2, &ISO_A, &MODULUS);
-
-    tv2 = BIG::modmul(&ISO_A, &tv2, &MODULUS);
-
-    let mut gx1 = BIG::modsqr(&x1n, &MODULUS);
-    gx1.add(&tv2);
-    gx1.rmod(&MODULUS);
-
-    gx1 = BIG::modmul(&x1n, &gx1, &MODULUS);
-
-    tv2 = BIG::modmul(&gxd, &ISO_B, &MODULUS);
-
-    gx1.add(&tv2);
-    gx1.rmod(&MODULUS);
-
-    let mut tv4 = BIG::modsqr(&gxd, &MODULUS);
-
-    tv2 = BIG::modmul(&gx1, &gxd, &MODULUS);
-
-    tv4 = BIG::modmul(&tv4, &tv2, &MODULUS);
-
-    let mut y1 = BIG::new_copy(&tv4);
-    y1 = y1.powmod(&C1_PM3D4, &MODULUS);
-    y1 = BIG::modmul(&y1, &tv2, &MODULUS);
-
-    let mut x2n = BIG::modmul(&tv3, &x1n, &MODULUS);
-
-    let mut y2 = BIG::modmul(&y1, &C2_PM3D4, &MODULUS);
-
-    y2 = BIG::modmul(&y2, &tv1, &MODULUS);
-
-    y2 = BIG::modmul(&y2, &u, &MODULUS);
-
-    tv2 = BIG::modsqr(&y1, &MODULUS);
-
-    tv2 = BIG::modmul(&tv2, &gxd, &MODULUS);
-    let e2 = if tv2 == gx1 { 1 } else { 0 };
-
-    let mut xn = BIG::new_copy(&x2n);
-    xn.cmove(&x1n, e2);
-
-    let mut y = BIG::new_copy(&y2);
-    y.cmove(&y1, e2 as isize);
-
-    let e3 = if sgn0(&u) == sgn0(&y) { 1 } else { 0 };
-
-    let mut neg_y = BIG::modneg(&y, &MODULUS);
-    neg_y.cmove(&y, e3 as isize);
-
-    xn.div(&xd);
-
-    (xn, neg_y)
 }
 
 /// See Section 4.1 in
@@ -329,7 +240,7 @@ fn iso_map_helper(x: &[BIG], k: &[BIG]) -> BIG {
 
 /// Hash to field using expand_message_xmd to compute two `u`s as specified in Section 5.2 in
 /// <https://datatracker.ietf.org/doc/draft-irtf-cfrg-hash-to-curve/?include_text=1>
-fn hash_to_field_xmd_1<D: BlockInput + Digest<OutputSize = U32>, M: AsRef<[u8]>>(msg: M, dst: &DomainSeparationTag) -> Result<BIG, HashingError> {
+fn hash_to_field_xmd_nu<D: BlockInput + Digest<OutputSize = U32>, M: AsRef<[u8]>>(msg: M, dst: &DomainSeparationTag) -> Result<BIG, HashingError> {
     // length_in_bytes = count * m * L = 1 * 1 * 64 = 64
     let random_bytes = expand_message_xmd::<M, D, L>(msg, dst)?;
     // elm_offset = L * (j + i * m) = 64 * (0 + 0 * 1) = 0
@@ -341,17 +252,15 @@ fn hash_to_field_xmd_1<D: BlockInput + Digest<OutputSize = U32>, M: AsRef<[u8]>>
 /// <https://datatracker.ietf.org/doc/draft-irtf-cfrg-hash-to-curve/?include_text=1>
 ///
 /// We avoid the loop and get compile time checking this way
-fn hash_to_field_xmd_2<D: BlockInput + Digest<OutputSize = U32>, M: AsRef<[u8]>>(msg: M, dst: &DomainSeparationTag) -> Result<(BIG, BIG), HashingError> {
+fn hash_to_field_xmd_ro<D: BlockInput + Digest<OutputSize = U32>, M: AsRef<[u8]>>(msg: M, dst: &DomainSeparationTag) -> Result<(BIG, BIG), HashingError> {
     // length_in_bytes = count * m * L = 2 * 1 * 64 = 128
-    let random_bytes = expand_message_xmd::<M, D, TWO_L>(msg, dst)?;
+    let random_bytes = expand_message_xmd::<M, D, TwoL>(msg, dst)?;
     // elm_offset_0 = L * (j + i * m) = 64 * (0 + 0 * 1) = 0
     // elm_offset_1 = L * (j + i * m) = 64 * (0 + 1 * 1) = 64
     // tv_0 = substr(random_bytes, 0, 64)
     // tv_1 = substr(random_bytes, 64, 64)
-    let mut u_0 = field_elem_from_larger_bytearray(&random_bytes[0..L::to_usize()]);
-    let mut u_1 = field_elem_from_larger_bytearray(&random_bytes[L::to_usize()..]);
-    println!("u0 = {}", u_0.to_hex());
-    println!("u1 = {}", u_1.to_hex());
+    let u_0 = field_elem_from_larger_bytearray(&random_bytes[0..L::to_usize()]);
+    let u_1 = field_elem_from_larger_bytearray(&random_bytes[L::to_usize()..]);
     Ok((u_0, u_1))
 }
 
@@ -371,17 +280,8 @@ fn field_elem_from_larger_bytearray(random_bytes: &[u8]) -> BIG {
 #[cfg(test)]
 mod tests {
     use crate::{DomainSeparationTag, HashToCurve};
-    use crate::bls381g1::{hash_to_field_xmd_1, hash_to_field_xmd_2, map_to_curve, Bls12381G1XmdSha256Sswu};
+    use crate::bls381g1::{hash_to_field_xmd_nu, hash_to_field_xmd_ro, map_to_curve, Bls12381G1XmdSha256Sswu};
     use amcl_miracl::bls381::{big::BIG, ecp::ECP};
-    use super::MODULUS;
-
-    #[ignore]
-    #[test]
-    fn print_constants() {
-        let mut p = BIG::new_big(&MODULUS);
-        p.rmod(&BIG::new_int(4));
-        println!("p = {}", p.w[0]);
-    }
 
     #[test]
     fn hash_to_curve_tests() {
@@ -396,10 +296,10 @@ mod tests {
             "a512_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
         ];
         let p = [
-            ("045f87745ff759f9197e131ad83d47d635dc36a3e0c7e4a1be5e1effe5e63ac69c8f34e6c3aef9c5cf28224922788367", "06125886a03f883740a078313d5fa6e4a68b9c0394eb75f77c65fc8b44db3f4ef933ac6adf341bc45fabc7907afcb832"),
-            ("009a357691a6f7b2917d9a34ba64d896d40b49733fcb3207f8c146e20fffb47823198a26b6ceeb01215fc3422908020e", "03fe44c894c107a8547826b60f577b90f80c63f899ef9dcff94daadae180ad803609337c9ec97d6d9b8ba306df7a9849"),
-            ("04eb09680fe48598533932907810fb7681e60b3689cb138454bec627490c5089b6dd755556e52a36c3817e98b62d7497", "1763dd8bf6823d9a22124d22a4ab3d93d8a9603ec80b4a40905b26664b16033fa6e73a6155c9bc4c6faa42bf911ffba1"),
-            ("0915842b42c2c4d3b509823c60c1fad834784ff451855f43390b80c3b6985d76aadc6ecfbb4b42a07921410d6821f0bb", "052873ee0b444dd8337ce403636d680cff1e9402b7a1ce2ab210bff11a83fe4e14216fe96efe3f344c1a2ec0fc1b2c5f"),
+            ("14738daf70f5142df038c9e3be76f5d71b0db6613e5ef55cfe8e43e27f840dc75de97092da617376a9f598e7a0920c47", "12645b7cb071943631d062b22ca61a8a3df2a8bdac4e6fcd2c18643ef37a98beacf770ce28cb01c8abf5ed63d1a19b53"),
+            ("01fea27a940188120178dfceec87dca78b745b6e73757be21c54d6cee6f07e3d5a465cf425c9d34dccfa95acffa86bf2", "18def9271f5fd253380c764a6818e8b6524c3d35864fcf963d85031225d62bf8cd0abeb326c3c62fec56f6100fa04367"),
+            ("0bdbca067fc4458a1206ecf3e235b400449c5693dd99e99a9793da076cb65e1b796bc279c892ae1c320c3783e25062d2", "12ca3f12b93b0028390a4ef4fa7083cb23f66ca42423e6e53987620e1d57c23a0ad6a14db1f709d0494c7d5122e0632f"),
+            ("0a81ca09b6a8c05712396801e6432a87b14ab1f764fa519e9f515816607283fe2a653a191fc1c8fee89cd30195e7a8e1", "11c7f1b59bb552692288da6557d1b5c72a448101faf56dd4125d8422af1425c4ddeecfbd5200525064657a79bdd0c3ed"),
         ];
 
         let blshasher = Bls12381G1XmdSha256Sswu::from(dst);
@@ -407,6 +307,36 @@ mod tests {
         for i in 0..msgs.len() {
             let expected_p = ECP::new_bigs(&BIG::from_hex(p[i].0.to_string()), &BIG::from_hex(p[i].1.to_string()));
             let actual_p = blshasher.hash_to_curve(msgs[i]);
+            assert!(actual_p.is_ok());
+            let actual_p = actual_p.unwrap();
+            assert_eq!(expected_p, actual_p);
+        }
+    }
+
+    #[test]
+    fn encode_to_curve_tests() {
+        let dst = DomainSeparationTag::new("BLS12381G1_XMD:SHA-256_SSWU_NU_",
+                                           Some("TESTGEN"),
+                                           None,
+                                           None).unwrap();
+        let msgs = [
+            "",
+            "abc",
+            "abcdef0123456789",
+            "a512_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        ];
+        let p = [
+            ("115281bd55a4103f31c8b12000d98149598b72e5da14e953277def263a24bc2e9fd8fa151df73ea3800f9c8cbb9b245c", "0796506faf9edbf1957ba8d667a079cab0d3a37e302e5132bd25665b66b26ea8556a0cfb92d6ae2c4890df0029b455ce"),
+            ("04a7a63d24439ade3cd16eaab22583c95b061136bd5013cf109d92983f902c31f49c95cbeb97222577e571e97a68a32e", "09a8aa8d6e4b409bbe9a6976c016688269024d6e9d378ed25e8b4986194511f479228fa011ec88b8f4c57a621fc12187"),
+            ("05c59faaf88187f51cd9cc6c20ca47ac66cc38d99af88aef2e82d7f35104168916f200a79562e64bc843f83cdc8a4675", "0b10472100a4aaa665f35f044b14a234b8f74990fa029e3dd06aa60b232fd9c232564ceead8cdb72a8a0320fc1071845"),
+            ("10147709f8d4f6f2fa6f957f6c6533e3bf9069c01be721f9421d88e0f02d8c617d048c6f8b13b81309d1ef6b56eeddc7", "1048977c38688f1a3acf48ae319216cb1509b6a29bd1e7f3b2e476088a280e8c97d4a4c147f0203c7b3acb3caa566ae8"),
+        ];
+
+        let blshasher = Bls12381G1XmdSha256Sswu::from(dst);
+
+        for i in 0..msgs.len() {
+            let expected_p = ECP::new_bigs(&BIG::from_hex(p[i].0.to_string()), &BIG::from_hex(p[i].1.to_string()));
+            let actual_p = blshasher.encode_to_curve(msgs[i]);
             assert!(actual_p.is_ok());
             let actual_p = actual_p.unwrap();
             assert_eq!(expected_p, actual_p);
@@ -449,7 +379,7 @@ mod tests {
         ];
 
         for i in 0..msgs.len() {
-            let u = hash_to_field_xmd_2::<sha2::Sha256, &str>(msgs[i], &dst).unwrap();
+            let u = hash_to_field_xmd_ro::<sha2::Sha256, &str>(msgs[i], &dst).unwrap();
             let exp_q= ECP::new_bigs(
                 &BIG::from_hex(expected_q[i].0.to_string()),
                 &BIG::from_hex(expected_q[i].1.to_string())
@@ -486,7 +416,7 @@ mod tests {
         ];
 
         for i in 0..msgs.len() {
-            let u = hash_to_field_xmd_1::<sha2::Sha256, &str>(msgs[i], &dst).unwrap();
+            let u = hash_to_field_xmd_nu::<sha2::Sha256, &str>(msgs[i], &dst).unwrap();
             let expected_q = ECP::new_bigs(
                 &BIG::from_hex(q_s[i].0.to_string()),
                 &BIG::from_hex(q_s[i].1.to_string())
@@ -518,7 +448,7 @@ mod tests {
 
         for i in 0..msgs.len() {
             let expected_u = BIG::from_hex(executed_u_s[i].to_string());
-            let actual_u = hash_to_field_xmd_1::<sha2::Sha256, &str>(msgs[i], &dst);
+            let actual_u = hash_to_field_xmd_nu::<sha2::Sha256, &str>(msgs[i], &dst);
             assert!(actual_u.is_ok());
             assert_eq!(actual_u.unwrap(), expected_u);
         }
@@ -547,7 +477,7 @@ mod tests {
         for i in 0..msgs.len() {
             let expected_u0 = BIG::from_hex(expected_u_s[i].0.to_string());
             let expected_u1 = BIG::from_hex(expected_u_s[i].1.to_string());
-            let res = hash_to_field_xmd_2::<sha2::Sha256, &str>(msgs[i], &dst);
+            let res = hash_to_field_xmd_ro::<sha2::Sha256, &str>(msgs[i], &dst);
             assert!(res.is_ok());
             let (actual_u0, actual_u1) = res.unwrap();
             assert_eq!(actual_u0, expected_u0);
