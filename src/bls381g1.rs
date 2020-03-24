@@ -10,7 +10,7 @@ use crate::{HashToCurveXmd, HashToCurveXof};
 use amcl_miracl::bls381::{big::BIG, dbig::DBIG, ecp::ECP};
 use digest::{
     generic_array::typenum::{marker_traits::Unsigned, U128, U32, U64},
-    BlockInput, Digest, ExtendableOutput, Input, Reset, XofReader,
+    BlockInput, Digest, ExtendableOutput, Input, Reset,
 };
 use std::cmp::Ordering;
 

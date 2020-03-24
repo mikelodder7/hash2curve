@@ -25,7 +25,7 @@ Below is an outline of the of the suites supported by this crate:
 - [ ] Suites for Curve448 and Ed448
 - [ ] Suites for Secp256k1
 - [ ] Suites for BLS12-381
-    - [ ] BLS12-381 G1
+    - [x] BLS12-381 G1
     - [ ] BLS12-381 G2
     
 ## Examples on using the code

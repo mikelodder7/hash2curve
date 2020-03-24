@@ -120,20 +120,6 @@ impl DomainSeparationTag {
         Ok(())
     }
 
-    /// Check that there is at most `MAX_DMS_SIZE` bytes
-    fn check_max_length<I: AsRef<[u8]>>(output: I) -> Result<(), HashingError> {
-        if output.as_ref().len() > MAX_DMS_SIZE {
-            return Err(HashingError::from_msg(
-                HashingErrorKind::InvalidDomainSeparationTag,
-                format!(
-                    "Domain separation tag cannot be longer than {}",
-                    MAX_DMS_SIZE
-                ),
-            ));
-        }
-        Ok(())
-    }
-
     /// Convert all the fields into a byte array
     fn to_slice(&self) -> Vec<u8> {
         let mut output = Vec::new();
