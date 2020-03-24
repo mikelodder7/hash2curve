@@ -3,22 +3,14 @@
 //! and Section 5 of
 //!  <https://eprint.iacr.org/2019/403.pdf>
 
-use crate::{DomainSeparationTag, expand_message_xmd};
 use crate::error::HashingError;
 use crate::isogeny::bls381g1::*;
-use crate::HashToCurve;
+use crate::{expand_message_xmd, expand_message_xof, DomainSeparationTag};
+use crate::{HashToCurveXmd, HashToCurveXof};
 use amcl_miracl::bls381::{big::BIG, dbig::DBIG, ecp::ECP};
 use digest::{
-    Digest,
-    BlockInput,
-    generic_array::{
-        typenum::{
-            U32,
-            U64,
-            U128,
-            marker_traits::Unsigned
-        }
-    }
+    generic_array::typenum::{marker_traits::Unsigned, U128, U32, U64},
+    BlockInput, Digest, ExtendableOutput, Input, Reset, XofReader,
 };
 use std::cmp::Ordering;
 
@@ -27,53 +19,131 @@ use std::cmp::Ordering;
 /// L = 64
 type L = U64;
 type TwoL = U128;
-const MODULUS: BIG = BIG { w: amcl_miracl::bls381::rom::MODULUS };
-const PM1DIV2: BIG = BIG { w: [71916856549561685, 108086211381297143, 186063435852751093, 218960087668936289, 225643796693662629, 229680090418738422, 3490221905] };
-const H_EFF: BIG = BIG { w: [144396663052632065, 52, 0, 0, 0, 0, 0] };
-const C1: BIG = BIG { w: [132416828320029820, -36241730206030966, -183175740354038500, -108808289511770161, 19716962043635886, 150180602526288156, 2033276157 ] };
-const C2: BIG = BIG { w: [170292360909944894, 176868607242987704, 7626954141253676, 39810925030715689, 14823383385055774, 15557254971433191, 634585801] };
-const SQRT_C1: BIG = BIG {w: [ 180073616350636715, 198158293766504443, 237146906002231418, 253595231910324016, 112821898346831314, 258955233285225083, 1745110952 ]};
+const MODULUS: BIG = BIG {
+    w: amcl_miracl::bls381::rom::MODULUS,
+};
+const PM1DIV2: BIG = BIG {
+    w: [
+        71916856549561685,
+        108086211381297143,
+        186063435852751093,
+        218960087668936289,
+        225643796693662629,
+        229680090418738422,
+        3490221905,
+    ],
+};
+const H_EFF: BIG = BIG {
+    w: [144396663052632065, 52, 0, 0, 0, 0, 0],
+};
+const C1: BIG = BIG {
+    w: [
+        132416828320029820,
+        -36241730206030966,
+        -183175740354038500,
+        -108808289511770161,
+        19716962043635886,
+        150180602526288156,
+        2033276157,
+    ],
+};
+const C2: BIG = BIG {
+    w: [
+        170292360909944894,
+        176868607242987704,
+        7626954141253676,
+        39810925030715689,
+        14823383385055774,
+        15557254971433191,
+        634585801,
+    ],
+};
+const SQRT_C1: BIG = BIG {
+    w: [
+        180073616350636715,
+        198158293766504443,
+        237146906002231418,
+        253595231910324016,
+        112821898346831314,
+        258955233285225083,
+        1745110952,
+    ],
+};
 
 /// BLS12381G1_XMD:SHA-256_SSWU provides both
 /// Random Oracle (RO)
 /// Nonuniform (NU)
-pub struct Bls12381G1XmdSha256Sswu {
-    dst: DomainSeparationTag
+pub struct Bls12381G1Sswu {
+    dst: DomainSeparationTag,
 }
 
-impl Bls12381G1XmdSha256Sswu {
+impl Bls12381G1Sswu {
     /// Create a new implementation with the default
-    pub fn new() -> Self {
-        Self {
-            dst: DomainSeparationTag::new("BLS12381G1_XMD:SHA-256_SSWU_", Some("0_0_1"), None, None).unwrap(),
-        }
-    }
+    pub fn new(dst: DomainSeparationTag) -> Self { Self { dst } }
 }
 
-impl From<DomainSeparationTag> for Bls12381G1XmdSha256Sswu {
-    fn from(dst: DomainSeparationTag) -> Self {
-        Self { dst }
-    }
+impl From<DomainSeparationTag> for Bls12381G1Sswu {
+    fn from(dst: DomainSeparationTag) -> Self { Self { dst } }
 }
 
-impl HashToCurve for Bls12381G1XmdSha256Sswu {
+impl HashToCurveXmd for Bls12381G1Sswu {
     type Output = ECP;
 
-    fn encode_to_curve<I: AsRef<[u8]>>(&self, data: I) -> Result<Self::Output, HashingError> {
-        let u = hash_to_field_xmd_nu::<sha2::Sha256, I>(data, &self.dst)?;
-        let q = map_to_curve(u);
-        let p = clear_cofactor(q);
-        Ok(p)
+    fn encode_to_curve_xmd<D: BlockInput + Digest<OutputSize = U32>, I: AsRef<[u8]>>(
+        &self,
+        data: I,
+    ) -> Result<Self::Output, HashingError> {
+        let u = hash_to_field_xmd_nu::<D, I>(data, &self.dst)?;
+        Ok(encode_to_curve(u))
     }
 
-    fn hash_to_curve<I: AsRef<[u8]>>(&self, data: I) -> Result<Self::Output, HashingError> {
-        let (u0, u1) = hash_to_field_xmd_ro::<sha2::Sha256, I>(data, &self.dst)?;
-        let mut q0 = map_to_curve(u0);
-        let q1 = map_to_curve(u1);
-        q0.add(&q1);
-        let p = clear_cofactor(q0);
-        Ok(p)
+    fn hash_to_curve_xmd<D: BlockInput + Digest<OutputSize = U32>, I: AsRef<[u8]>>(
+        &self,
+        data: I,
+    ) -> Result<Self::Output, HashingError> {
+        let (u0, u1) = hash_to_field_xmd_ro::<D, I>(data, &self.dst)?;
+        Ok(hash_to_curve(u0, u1))
     }
+}
+
+impl HashToCurveXof for Bls12381G1Sswu {
+    type Output = ECP;
+
+    fn encode_to_curve_xof<
+        X: ExtendableOutput + Input + Reset + Default,
+        D: Digest<OutputSize = U32>,
+        I: AsRef<[u8]>,
+    >(
+        &self,
+        data: I,
+    ) -> Result<Self::Output, HashingError> {
+        let u = hash_to_field_xof_nu::<X, D, I>(data, &self.dst)?;
+        Ok(encode_to_curve(u))
+    }
+
+    fn hash_to_curve_xof<
+        X: ExtendableOutput + Input + Reset + Default,
+        D: Digest<OutputSize = U32>,
+        I: AsRef<[u8]>,
+    >(
+        &self,
+        data: I,
+    ) -> Result<Self::Output, HashingError> {
+        let (u0, u1) = hash_to_field_xof_ro::<X, D, I>(data, &self.dst)?;
+        Ok(hash_to_curve(u0, u1))
+    }
+}
+
+fn encode_to_curve(u: BIG) -> ECP {
+    let q = map_to_curve(u);
+    clear_cofactor(q)
+}
+
+fn hash_to_curve(u0: BIG, u1: BIG) -> ECP {
+    let mut q0 = map_to_curve(u0);
+    let q1 = map_to_curve(u1);
+    q0.add(&q1);
+    clear_cofactor(q0)
 }
 
 /// See Section 7 in
@@ -91,6 +161,8 @@ fn map_to_curve(u: BIG) -> ECP {
 
 /// See Section 6.6.2.1 in
 /// <https://datatracker.ietf.org/doc/draft-irtf-cfrg-hash-to-curve/?include_text=1>
+///
+/// Only works if p is congruent to 3 mod 4
 fn map_to_curve_simple_swu(u: BIG) -> (BIG, BIG) {
     // tv1 = Z * u^2
     let tv1 = BIG::modmul(&Z, &BIG::modsqr(&u, &MODULUS), &MODULUS);
@@ -105,7 +177,7 @@ fn map_to_curve_simple_swu(u: BIG) -> (BIG, BIG) {
     // x1 = inv0(x1)
     x1.invmodp(&MODULUS);
 
-    let e1 = if x1.iszilch() { 1 } else{ 0 };
+    let e1 = if x1.iszilch() { 1 } else { 0 };
 
     // x1 = x1 + 1
     x1.inc(1);
@@ -195,16 +267,16 @@ fn sgn0(x: &BIG) -> Ordering {
 /// <https://eprint.iacr.org/2019/403.pdf>
 fn iso_map(x_prime: BIG, y_prime: BIG) -> ECP {
     let mut x_values: [BIG; 16] = [BIG::new(); 16];
-    x_values[0]  = BIG::new_int(1);
-    x_values[1]  = x_prime;
-    x_values[2]  = BIG::modsqr(&x_prime, &MODULUS);
-    x_values[3]  = BIG::modmul(&x_values[2], &x_prime, &MODULUS);
-    x_values[4]  = BIG::modmul(&x_values[3], &x_prime, &MODULUS);
-    x_values[5]  = BIG::modmul(&x_values[4], &x_prime, &MODULUS);
-    x_values[6]  = BIG::modmul(&x_values[5], &x_prime, &MODULUS);
-    x_values[7]  = BIG::modmul(&x_values[6], &x_prime, &MODULUS);
-    x_values[8]  = BIG::modmul(&x_values[7], &x_prime, &MODULUS);
-    x_values[9]  = BIG::modmul(&x_values[8], &x_prime, &MODULUS);
+    x_values[0] = BIG::new_int(1);
+    x_values[1] = x_prime;
+    x_values[2] = BIG::modsqr(&x_prime, &MODULUS);
+    x_values[3] = BIG::modmul(&x_values[2], &x_prime, &MODULUS);
+    x_values[4] = BIG::modmul(&x_values[3], &x_prime, &MODULUS);
+    x_values[5] = BIG::modmul(&x_values[4], &x_prime, &MODULUS);
+    x_values[6] = BIG::modmul(&x_values[5], &x_prime, &MODULUS);
+    x_values[7] = BIG::modmul(&x_values[6], &x_prime, &MODULUS);
+    x_values[8] = BIG::modmul(&x_values[7], &x_prime, &MODULUS);
+    x_values[9] = BIG::modmul(&x_values[8], &x_prime, &MODULUS);
     x_values[10] = BIG::modmul(&x_values[9], &x_prime, &MODULUS);
     x_values[11] = BIG::modmul(&x_values[10], &x_prime, &MODULUS);
     x_values[12] = BIG::modmul(&x_values[11], &x_prime, &MODULUS);
@@ -224,8 +296,6 @@ fn iso_map(x_prime: BIG, y_prime: BIG) -> ECP {
     y = BIG::modmul(&y, &y_den, &MODULUS);
     y = BIG::modmul(&y, &y_prime, &MODULUS);
 
-    println!("q.x = {}", x.to_hex());
-    println!("q.y = {}", y.to_hex());
     ECP::new_bigs(&x, &y)
 }
 
@@ -240,9 +310,12 @@ fn iso_map_helper(x: &[BIG], k: &[BIG]) -> BIG {
     new_x
 }
 
-/// Hash to field using expand_message_xmd to compute two `u`s as specified in Section 5.2 in
+/// Hash to field using expand_message_xmd to compute `u` as specified in Section 5.2 in
 /// <https://datatracker.ietf.org/doc/draft-irtf-cfrg-hash-to-curve/?include_text=1>
-fn hash_to_field_xmd_nu<D: BlockInput + Digest<OutputSize = U32>, M: AsRef<[u8]>>(msg: M, dst: &DomainSeparationTag) -> Result<BIG, HashingError> {
+fn hash_to_field_xmd_nu<D: BlockInput + Digest<OutputSize = U32>, M: AsRef<[u8]>>(
+    msg: M,
+    dst: &DomainSeparationTag,
+) -> Result<BIG, HashingError> {
     // length_in_bytes = count * m * L = 1 * 1 * 64 = 64
     let random_bytes = expand_message_xmd::<M, D, L>(msg, dst)?;
     // elm_offset = L * (j + i * m) = 64 * (0 + 0 * 1) = 0
@@ -254,9 +327,52 @@ fn hash_to_field_xmd_nu<D: BlockInput + Digest<OutputSize = U32>, M: AsRef<[u8]>
 /// <https://datatracker.ietf.org/doc/draft-irtf-cfrg-hash-to-curve/?include_text=1>
 ///
 /// We avoid the loop and get compile time checking this way
-fn hash_to_field_xmd_ro<D: BlockInput + Digest<OutputSize = U32>, M: AsRef<[u8]>>(msg: M, dst: &DomainSeparationTag) -> Result<(BIG, BIG), HashingError> {
+fn hash_to_field_xmd_ro<D: BlockInput + Digest<OutputSize = U32>, M: AsRef<[u8]>>(
+    msg: M,
+    dst: &DomainSeparationTag,
+) -> Result<(BIG, BIG), HashingError> {
     // length_in_bytes = count * m * L = 2 * 1 * 64 = 128
     let random_bytes = expand_message_xmd::<M, D, TwoL>(msg, dst)?;
+    // elm_offset_0 = L * (j + i * m) = 64 * (0 + 0 * 1) = 0
+    // elm_offset_1 = L * (j + i * m) = 64 * (0 + 1 * 1) = 64
+    // tv_0 = substr(random_bytes, 0, 64)
+    // tv_1 = substr(random_bytes, 64, 64)
+    let u_0 = field_elem_from_larger_bytearray(&random_bytes[0..L::to_usize()]);
+    let u_1 = field_elem_from_larger_bytearray(&random_bytes[L::to_usize()..]);
+    Ok((u_0, u_1))
+}
+
+/// Hash to field using expand_message_xof to compute `u` as specified in Section 5.2 in
+/// <https://datatracker.ietf.org/doc/draft-irtf-cfrg-hash-to-curve/?include_text=1>
+fn hash_to_field_xof_nu<
+    X: ExtendableOutput + Input + Reset + Default,
+    D: Digest<OutputSize = U32>,
+    M: AsRef<[u8]>,
+>(
+    msg: M,
+    dst: &DomainSeparationTag,
+) -> Result<BIG, HashingError> {
+    // length_in_bytes = count * m * L = 1 * 1 * 64 = 64
+    let random_bytes = expand_message_xof::<M, X, D, L>(msg, dst)?;
+    // elm_offset = L * (j + i * m) = 64 * (0 + 0 * 1) = 0
+    // tv = substr(random_bytes, 0, 64)
+    Ok(field_elem_from_larger_bytearray(random_bytes.as_slice()))
+}
+
+/// Hash to field using expand_message_xof to compute two `u`s as specified in Section 5.2 in
+/// <https://datatracker.ietf.org/doc/draft-irtf-cfrg-hash-to-curve/?include_text=1>
+///
+/// We avoid the loop and get compile time checking this way
+fn hash_to_field_xof_ro<
+    X: ExtendableOutput + Input + Reset + Default,
+    D: Digest<OutputSize = U32>,
+    M: AsRef<[u8]>,
+>(
+    msg: M,
+    dst: &DomainSeparationTag,
+) -> Result<(BIG, BIG), HashingError> {
+    // length_in_bytes = count * m * L = 2 * 1 * 64 = 128
+    let random_bytes = expand_message_xof::<M, X, D, TwoL>(msg, dst)?;
     // elm_offset_0 = L * (j + i * m) = 64 * (0 + 0 * 1) = 0
     // elm_offset_1 = L * (j + i * m) = 64 * (0 + 1 * 1) = 64
     // tv_0 = substr(random_bytes, 0, 64)
@@ -281,16 +397,21 @@ fn field_elem_from_larger_bytearray(random_bytes: &[u8]) -> BIG {
 
 #[cfg(test)]
 mod tests {
-    use crate::{DomainSeparationTag, HashToCurve};
-    use crate::bls381g1::{hash_to_field_xmd_nu, hash_to_field_xmd_ro, map_to_curve, Bls12381G1XmdSha256Sswu};
+    use crate::bls381g1::{
+        hash_to_field_xmd_nu, hash_to_field_xmd_ro, map_to_curve, Bls12381G1Sswu,
+    };
+    use crate::{DomainSeparationTag, HashToCurveXmd, HashToCurveXof};
     use amcl_miracl::bls381::{big::BIG, ecp::ECP};
 
     #[test]
-    fn hash_to_curve_tests() {
-        let dst = DomainSeparationTag::new("BLS12381G1_XMD:SHA-256_SSWU_RO_",
-                                           Some("TESTGEN"),
-                                           None,
-                                           None).unwrap();
+    fn hash_to_curve_xmd_tests() {
+        let dst = DomainSeparationTag::new(
+            "BLS12381G1_XMD:SHA-256_SSWU_RO_",
+            Some("TESTGEN"),
+            None,
+            None,
+        )
+        .unwrap();
         let msgs = [
             "",
             "abc",
@@ -304,11 +425,14 @@ mod tests {
             ("0a81ca09b6a8c05712396801e6432a87b14ab1f764fa519e9f515816607283fe2a653a191fc1c8fee89cd30195e7a8e1", "11c7f1b59bb552692288da6557d1b5c72a448101faf56dd4125d8422af1425c4ddeecfbd5200525064657a79bdd0c3ed"),
         ];
 
-        let blshasher = Bls12381G1XmdSha256Sswu::from(dst);
+        let blshasher = Bls12381G1Sswu::from(dst);
 
         for i in 0..msgs.len() {
-            let expected_p = ECP::new_bigs(&BIG::from_hex(p[i].0.to_string()), &BIG::from_hex(p[i].1.to_string()));
-            let actual_p = blshasher.hash_to_curve(msgs[i]);
+            let expected_p = ECP::new_bigs(
+                &BIG::from_hex(p[i].0.to_string()),
+                &BIG::from_hex(p[i].1.to_string()),
+            );
+            let actual_p = blshasher.hash_to_curve_xmd::<sha2::Sha256, &str>(msgs[i]);
             assert!(actual_p.is_ok());
             let actual_p = actual_p.unwrap();
             assert_eq!(expected_p, actual_p);
@@ -316,11 +440,50 @@ mod tests {
     }
 
     #[test]
-    fn encode_to_curve_tests() {
-        let dst = DomainSeparationTag::new("BLS12381G1_XMD:SHA-256_SSWU_NU_",
-                                           Some("TESTGEN"),
-                                           None,
-                                           None).unwrap();
+    fn hash_to_curve_xof_tests() {
+        let dst = DomainSeparationTag::new(
+            "BLS12381G1_XOF:SHAKE-128_SSWU_RO_",
+            Some("TESTGEN"),
+            None,
+            None,
+        )
+            .unwrap();
+        let msgs = [
+            "",
+            "abc",
+            "abcdef0123456789",
+            "a512_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        ];
+        let p = [
+            ("13BE5D0DA8916DC22A4683102E25158FCCF9695664B98E3CD41F723FEF99F92476FE5BFE495B787FDA5561AC6F0AB3B9", "10D5EFB4C0540BE37B23AB3A67324EA63D94AA5D7129210C7A4CA8AE5C48A3104CE74CEDC0117B56320CDD4242FEC1BC"),
+            ("185782F1391BE17A64BC8ECB88CD7957118C0B968B7DBFAAEA4D0288BE243E4CF8CC10306AC58DED6994AC48837701BB", "12D37C727D8F5AF320B9DAB4E563D6E6578BBAAA1300EBEC58C1003C1A121669A53B39795F387AD510DA12E389B7CD6B"),
+            ("19C3D7FF10EEF43623889C6221632C373A198AE108509A969D6B47A0D4ECA2483A884D2EAEA26A9214E6A54EBAD0E9C3", "025A8BD2768EC20CEA2E3D405FF72D4796BE83F8634317D1D70793591C6693954C91DEF9E6F553CE7ED4DC364CF05513"),
+            ("0398FD7E656CEC001E1B3E1F88CA0CF6791A8F1C2C970E78E7E4E672EAD45340D53F958E20BF384FBB333F6F45328A1F", "0478D9837665E168D9AC3505C08AE122C504A78D8BE487012F078864D6C7043463E665F0DEA92EB6B374CADC65780A35"),
+        ];
+
+        let blshasher = Bls12381G1Sswu::from(dst);
+
+        for i in 0..msgs.len() {
+            let expected_p = ECP::new_bigs(
+                &BIG::from_hex(p[i].0.to_string()),
+                &BIG::from_hex(p[i].1.to_string()),
+            );
+            let actual_p = blshasher.hash_to_curve_xof::<sha3::Shake128, sha3::Sha3_256, &str>(msgs[i]);
+            assert!(actual_p.is_ok());
+            let actual_p = actual_p.unwrap();
+            assert_eq!(expected_p, actual_p);
+        }
+    }
+
+    #[test]
+    fn encode_to_curve_xmd_tests() {
+        let dst = DomainSeparationTag::new(
+            "BLS12381G1_XMD:SHA-256_SSWU_NU_",
+            Some("TESTGEN"),
+            None,
+            None,
+        )
+        .unwrap();
         let msgs = [
             "",
             "abc",
@@ -334,11 +497,14 @@ mod tests {
             ("10147709f8d4f6f2fa6f957f6c6533e3bf9069c01be721f9421d88e0f02d8c617d048c6f8b13b81309d1ef6b56eeddc7", "1048977c38688f1a3acf48ae319216cb1509b6a29bd1e7f3b2e476088a280e8c97d4a4c147f0203c7b3acb3caa566ae8"),
         ];
 
-        let blshasher = Bls12381G1XmdSha256Sswu::from(dst);
+        let blshasher = Bls12381G1Sswu::from(dst);
 
         for i in 0..msgs.len() {
-            let expected_p = ECP::new_bigs(&BIG::from_hex(p[i].0.to_string()), &BIG::from_hex(p[i].1.to_string()));
-            let actual_p = blshasher.encode_to_curve(msgs[i]);
+            let expected_p = ECP::new_bigs(
+                &BIG::from_hex(p[i].0.to_string()),
+                &BIG::from_hex(p[i].1.to_string()),
+            );
+            let actual_p = blshasher.encode_to_curve_xmd::<sha2::Sha256, &str>(msgs[i]);
             assert!(actual_p.is_ok());
             let actual_p = actual_p.unwrap();
             assert_eq!(expected_p, actual_p);
@@ -346,11 +512,14 @@ mod tests {
     }
 
     #[test]
-    fn map_to_curve_2_tests() {
-        let dst = DomainSeparationTag::new("BLS12381G1_XMD:SHA-256_SSWU_RO_",
-                                           Some("TESTGEN"),
-                                           None,
-                                           None).unwrap();
+    fn map_to_curve_ro_tests() {
+        let dst = DomainSeparationTag::new(
+            "BLS12381G1_XMD:SHA-256_SSWU_RO_",
+            Some("TESTGEN"),
+            None,
+            None,
+        )
+        .unwrap();
         let msgs = [
             "",
             "abc",
@@ -382,15 +551,15 @@ mod tests {
 
         for i in 0..msgs.len() {
             let u = hash_to_field_xmd_ro::<sha2::Sha256, &str>(msgs[i], &dst).unwrap();
-            let exp_q= ECP::new_bigs(
+            let exp_q = ECP::new_bigs(
                 &BIG::from_hex(expected_q[i].0.to_string()),
-                &BIG::from_hex(expected_q[i].1.to_string())
+                &BIG::from_hex(expected_q[i].1.to_string()),
             );
             let actual_q = map_to_curve(u.0);
             assert_eq!(exp_q, actual_q);
             let exp_q = ECP::new_bigs(
                 &BIG::from_hex(expected_q[i].2.to_string()),
-                &BIG::from_hex(expected_q[i].3.to_string())
+                &BIG::from_hex(expected_q[i].3.to_string()),
             );
             let actual_q = map_to_curve(u.1);
             assert_eq!(exp_q, actual_q);
@@ -399,11 +568,14 @@ mod tests {
 
     // Take from section G.9.2
     #[test]
-    fn map_to_curve_1_tests() {
-        let dst = DomainSeparationTag::new("BLS12381G1_XMD:SHA-256_SSWU_NU_",
-                                           Some("TESTGEN"),
-                                           None,
-                                           None).unwrap();
+    fn map_to_curve_nu_tests() {
+        let dst = DomainSeparationTag::new(
+            "BLS12381G1_XMD:SHA-256_SSWU_NU_",
+            Some("TESTGEN"),
+            None,
+            None,
+        )
+        .unwrap();
         let msgs = [
             "",
             "abc",
@@ -421,7 +593,7 @@ mod tests {
             let u = hash_to_field_xmd_nu::<sha2::Sha256, &str>(msgs[i], &dst).unwrap();
             let expected_q = ECP::new_bigs(
                 &BIG::from_hex(q_s[i].0.to_string()),
-                &BIG::from_hex(q_s[i].1.to_string())
+                &BIG::from_hex(q_s[i].1.to_string()),
             );
             let actual_q1 = map_to_curve(u);
             assert_eq!(expected_q, actual_q1);
@@ -430,11 +602,14 @@ mod tests {
 
     // Take from section G.9.2
     #[test]
-    fn hash_to_field_xmd_1_tests() {
-        let dst = DomainSeparationTag::new("BLS12381G1_XMD:SHA-256_SSWU_NU_",
-                                           Some("TESTGEN"),
-                                           None,
-                                           None).unwrap();
+    fn hash_to_field_xmd_nu_tests() {
+        let dst = DomainSeparationTag::new(
+            "BLS12381G1_XMD:SHA-256_SSWU_NU_",
+            Some("TESTGEN"),
+            None,
+            None,
+        )
+        .unwrap();
         let msgs = [
             "",
             "abc",
@@ -458,11 +633,14 @@ mod tests {
 
     // Take from section G.9.1
     #[test]
-    fn hash_to_field_xmd_2_tests() {
-        let dst = DomainSeparationTag::new("BLS12381G1_XMD:SHA-256_SSWU_RO_",
-                                           Some("TESTGEN"),
-                                           None,
-                                           None).unwrap();
+    fn hash_to_field_xmd_ro_tests() {
+        let dst = DomainSeparationTag::new(
+            "BLS12381G1_XMD:SHA-256_SSWU_RO_",
+            Some("TESTGEN"),
+            None,
+            None,
+        )
+        .unwrap();
         let msgs = [
             "",
             "abc",

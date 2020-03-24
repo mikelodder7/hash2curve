@@ -145,20 +145,57 @@ impl DomainSeparationTag {
     }
 }
 
-/// The `HashToCurve` trait specifies an interface common for mapping to curve functions.
-pub trait HashToCurve {
+/// The `HashToCurveXmd` trait specifies an interface common for mapping to curve functions using XMD to expand the message.
+pub trait HashToCurveXmd {
     /// The return type by the underlying hash to curve implementation
     type Output;
     /// Nonuniform encoding.  This function encodes byte
     /// strings to points in G.  The distribution of the output is not
     /// uniformly random in G.
-    fn encode_to_curve<I: AsRef<[u8]>>(&self, data: I) -> Result<Self::Output, HashingError>;
+    fn encode_to_curve_xmd<D: BlockInput + Digest<OutputSize = U32>, I: AsRef<[u8]>>(
+        &self,
+        data: I,
+    ) -> Result<Self::Output, HashingError>;
 
     /// Random oracle encoding (hash_to_curve).  This function encodes
     /// byte strings to points in G.  This function is suitable for
     /// applications requiring a random oracle returning points in G,
     /// provided that map_to_curve is "well distributed".
-    fn hash_to_curve<I: AsRef<[u8]>>(&self, data: I) -> Result<Self::Output, HashingError>;
+    fn hash_to_curve_xmd<D: BlockInput + Digest<OutputSize = U32>, I: AsRef<[u8]>>(
+        &self,
+        data: I,
+    ) -> Result<Self::Output, HashingError>;
+}
+
+/// The `HashToCurveXof` trait specifies an interface common for mapping to curve functions using XMD to expand the message.
+pub trait HashToCurveXof {
+    /// The return type by the underlying hash to curve implementation
+    type Output;
+
+    /// Nonuniform encoding.  This function encodes byte
+    /// strings to points in G.  The distribution of the output is not
+    /// uniformly random in G.
+    fn encode_to_curve_xof<
+        X: ExtendableOutput + Input + Reset + Default,
+        D: Digest<OutputSize = U32>,
+        I: AsRef<[u8]>,
+    >(
+        &self,
+        data: I,
+    ) -> Result<Self::Output, HashingError>;
+
+    /// Random oracle encoding (hash_to_curve).  This function encodes
+    /// byte strings to points in G.  This function is suitable for
+    /// applications requiring a random oracle returning points in G,
+    /// provided that map_to_curve is "well distributed".
+    fn hash_to_curve_xof<
+        X: ExtendableOutput + Input + Reset + Default,
+        D: Digest<OutputSize = U32>,
+        I: AsRef<[u8]>,
+    >(
+        &self,
+        data: I,
+    ) -> Result<Self::Output, HashingError>;
 }
 
 /// The maximum number of bytes that can be requested for an expand operation
@@ -188,7 +225,7 @@ where
     dst_prime.insert(0, dst_prime.len() as u8); //I2OSP(len(DST), 1) || DST
     let mut hasher = X::default();
     hasher.input(msg.as_ref());
-    hasher.input(T::to_u16().to_be_bytes());             //I2OSP(len_in_bytes, 2)
+    hasher.input(T::to_u16().to_be_bytes()); //I2OSP(len_in_bytes, 2)
     hasher.input(dst_prime.as_slice());
     let mut result = vec![0u8; T::to_usize()];
     hasher.xof_result().read(result.as_mut_slice());
@@ -226,16 +263,16 @@ where
     let mut dst_prime = dst.to_bytes::<D>()?;
     dst_prime.insert(0, dst_prime.len() as u8); //I2OSP(len(DST), 1) || DST
     let mut hasher = D::new();
-    hasher.input(vec![0u8; D::BlockSize::to_usize()]);   //z_pad = I2OSP(0, r_in_bytes)
+    hasher.input(vec![0u8; D::BlockSize::to_usize()]); //z_pad = I2OSP(0, r_in_bytes)
     hasher.input(msg.as_ref());
-    hasher.input(T::to_u16().to_be_bytes());             //l_i_b_str = I2OSP(len_in_bytes, 2)
+    hasher.input(T::to_u16().to_be_bytes()); //l_i_b_str = I2OSP(len_in_bytes, 2)
     hasher.input([0u8]); //I2OSP(0, 1)
     hasher.input(dst_prime.as_slice());
-    let b_0 = hasher.result_reset();        //b_0 = H(Z_pad || msg || l_i_b_str || I2OSP(0, 1) || DST_prime)
+    let b_0 = hasher.result_reset(); //b_0 = H(Z_pad || msg || l_i_b_str || I2OSP(0, 1) || DST_prime)
     hasher.input(b_0);
     hasher.input([1u8]); //I2OSP(1, 1)
     hasher.input(dst_prime.as_slice());
-    let mut b_i = hasher.result_reset();    //b_1 = H(b_0 || I2OSP(1, 1) || DST_prime)
+    let mut b_i = hasher.result_reset(); //b_1 = H(b_0 || I2OSP(1, 1) || DST_prime)
     let mut random_bytes = Vec::new();
     random_bytes.extend_from_slice(b_i.as_slice());
     // Its tempting to terminate early because we only need to loop until enough
@@ -244,10 +281,12 @@ where
         hasher.input(vxor(b_0.as_slice(), b_i.as_slice()).as_slice());
         hasher.input([(i + 1) as u8]);
         hasher.input(dst_prime.as_slice());
-        b_i = hasher.result_reset();                            //b_i = H(strxor(b_0, b_(i - 1)) || I2OSP(i, 1) || DST_prime)
+        b_i = hasher.result_reset(); //b_i = H(strxor(b_0, b_(i - 1)) || I2OSP(i, 1) || DST_prime)
         random_bytes.extend_from_slice(b_i.as_slice());
     }
-    Ok(GenericArray::from_iter(random_bytes.into_iter().take(T::to_usize())))
+    Ok(GenericArray::from_iter(
+        random_bytes.into_iter().take(T::to_usize()),
+    ))
 }
 
 /// Internal function returns the bitwise XOR of the two strings.

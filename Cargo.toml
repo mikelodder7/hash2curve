@@ -32,14 +32,14 @@ lto = true
 
 [features]
 default = []
-bls = ["miracl_amcl", "sha2"]
+bls = ["miracl_amcl"]
 
 [dependencies]
 miracl_amcl = { version = "3.2.5", features = ["bls381"], optional = true }
 digest = "0.8.1"
 failure = "0.1.7"
-sha2 = { version = "0.8.1", optional = true }
 subtle = "2.2.2"
 
 [dev-dependencies]
 sha2 = "0.8.1"
+sha3 = "0.8.2"
