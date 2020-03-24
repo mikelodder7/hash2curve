@@ -33,8 +33,9 @@ type TWO_L = U128;
 const MODULUS: BIG = BIG { w: amcl_miracl::bls381::rom::MODULUS };
 const PM1DIV2: BIG = BIG { w: [71916856549561685, 108086211381297143, 186063435852751093, 218960087668936289, 225643796693662629, 229680090418738422, 3490221905] };
 const H_EFF: BIG = BIG { w: [144396663052632065, 52, 0, 0, 0, 0, 0] };
-const C1: BIG = BIG { w: [89, 0, 0, 0, 0, 0, 0] };
+const C1: BIG = BIG { w: [132416828320029820, -36241730206030966, -183175740354038500, -108808289511770161, 19716962043635886, 150180602526288156, 2033276157 ] };
 const C2: BIG = BIG { w: [170292360909944894, 176868607242987704, 7626954141253676, 39810925030715689, 14823383385055774, 15557254971433191, 634585801] };
+const SQRT_C1: BIG = BIG {w: [ 180073616350636715, 198158293766504443, 237146906002231418, 253595231910324016, 112821898346831314, 258955233285225083, 1745110952 ]};
 const C1_PM3D4: BIG = BIG { w: [180073616350636714, 198158293766504443, 237146906002231418, 253595231910324016, 112821898346831314, 258955233285225083, 1745110952] };
 const C2_PM3D4: BIG = BIG { w: [143833713099122040, 216172422762594286, 83896495553790442, 149689799186160835, 163057217235613515, 171129804685765101, 6980443811] };
 
@@ -91,12 +92,12 @@ fn map_to_curve(u: BIG) -> ECP {
 
 /// See Section 6.6.2.1 in
 /// <https://datatracker.ietf.org/doc/draft-irtf-cfrg-hash-to-curve/?include_text=1>
-fn map_to_curve_pm3d4(u: BIG) -> ECP {
-    let (mut x, mut y) = map_to_curve_simple_swu_pm3d4(u);
+fn map_to_curve_3mod4(u: BIG) -> ECP {
+    let (mut x, mut y) = map_to_curve_simple_swu_3mod4(u);
     iso_map(x, y)
 }
 
-/// See Section 6.6.3 in
+/// See Section 6.6.2.1 in
 /// <https://datatracker.ietf.org/doc/draft-irtf-cfrg-hash-to-curve/?include_text=1>
 fn map_to_curve_simple_swu(u: BIG) -> (BIG, BIG) {
     // tv1 = Z * u^2
@@ -157,18 +158,23 @@ fn map_to_curve_simple_swu(u: BIG) -> (BIG, BIG) {
     y2.cmove(&gx1, e2);
 
     // y = sqrt(y2)
-    let mut y = FP::new_big(&y2);
-    y.sqrt();
-    let y = y.redc();
+    let mut y = sqrt_3mod4(&y2);
 
     // e3 = sgn0(u) == sgn0(y)
     let e3 = if sgn0(&u) == sgn0(&y) { 1 } else { 0 };
 
-    // y = cmov(-y, y, e3)
+    // y = CMOV(-y, y, e3)
     let mut y_neg = BIG::modneg(&y, &MODULUS);
     y_neg.cmove(&y, e3);
 
     (x, y_neg)
+}
+
+/// Section F.1 in
+///
+fn sqrt_3mod4(x: &BIG) -> BIG {
+    let mut t = BIG::new_big(x);
+    t.powmod(&SQRT_C1, &MODULUS)
 }
 
 /// is_square(x) := { True,  if x^((q - 1) / 2) is 0 or 1 in F;
@@ -185,7 +191,7 @@ fn is_square(x: &BIG) -> bool {
 
 /// Simplified SWU for AB == 0 as described in Section 6.6.3 in
 /// <https://datatracker.ietf.org/doc/draft-irtf-cfrg-hash-to-curve/?include_text=1>
-fn map_to_curve_simple_swu_pm3d4(u: BIG) -> (BIG, BIG) {
+fn map_to_curve_simple_swu_3mod4(u: BIG) -> (BIG, BIG) {
     let mut tv1 = BIG::modsqr(&u, &MODULUS);
     let mut tv3 = BIG::modmul(&tv1, &Z, &MODULUS);
     let mut tv2 = BIG::modsqr(&tv3, &MODULUS);
@@ -276,26 +282,37 @@ fn sgn0(x: &BIG) -> Ordering {
 /// <https://eprint.iacr.org/2019/403.pdf>
 fn iso_map(x_prime: BIG, y_prime: BIG) -> ECP {
     let mut x_values: [BIG; 16] = [BIG::new(); 16];
-    x_values[0] = BIG::new_int(1);
-    x_values[1] = x_prime;
-
-    let mut x_cur = BIG::new_copy(&x_prime);
-    // Precompute x's
-    for i in 2..x_values.len() {
-        x_cur = BIG::modmul(&x_cur, &x_prime, &MODULUS);
-        x_values[i] = BIG::new_copy(&x_cur);
-    }
+    x_values[0]  = BIG::new_int(1);
+    x_values[1]  = x_prime;
+    x_values[2]  = BIG::modsqr(&x_prime, &MODULUS);
+    x_values[3]  = BIG::modmul(&x_values[2], &x_prime, &MODULUS);
+    x_values[4]  = BIG::modmul(&x_values[3], &x_prime, &MODULUS);
+    x_values[5]  = BIG::modmul(&x_values[4], &x_prime, &MODULUS);
+    x_values[6]  = BIG::modmul(&x_values[5], &x_prime, &MODULUS);
+    x_values[7]  = BIG::modmul(&x_values[6], &x_prime, &MODULUS);
+    x_values[8]  = BIG::modmul(&x_values[7], &x_prime, &MODULUS);
+    x_values[9]  = BIG::modmul(&x_values[8], &x_prime, &MODULUS);
+    x_values[10] = BIG::modmul(&x_values[9], &x_prime, &MODULUS);
+    x_values[11] = BIG::modmul(&x_values[10], &x_prime, &MODULUS);
+    x_values[12] = BIG::modmul(&x_values[11], &x_prime, &MODULUS);
+    x_values[13] = BIG::modmul(&x_values[12], &x_prime, &MODULUS);
+    x_values[14] = BIG::modmul(&x_values[13], &x_prime, &MODULUS);
+    x_values[15] = BIG::modmul(&x_values[14], &x_prime, &MODULUS);
 
     let mut x = iso_map_helper(&x_values, &X_NUM);
     let mut x_den = iso_map_helper(&x_values, &X_DEN);
     let mut y = iso_map_helper(&x_values, &Y_NUM);
     let mut y_den = iso_map_helper(&x_values, &Y_DEN);
 
-    x.div(&x_den);
-    y.div(&y_den);
+    x_den.invmodp(&MODULUS);
+    x = BIG::modmul(&x, &x_den, &MODULUS);
 
-    let y = BIG::modmul(&y, &y_prime, &MODULUS);
+    y_den.invmodp(&MODULUS);
+    y = BIG::modmul(&y, &y_den, &MODULUS);
+    y = BIG::modmul(&y, &y_prime, &MODULUS);
 
+    println!("q.x = {}", x.to_hex());
+    println!("q.y = {}", y.to_hex());
     ECP::new_bigs(&x, &y)
 }
 
@@ -331,8 +348,10 @@ fn hash_to_field_xmd_2<D: BlockInput + Digest<OutputSize = U32>, M: AsRef<[u8]>>
     // elm_offset_1 = L * (j + i * m) = 64 * (0 + 1 * 1) = 64
     // tv_0 = substr(random_bytes, 0, 64)
     // tv_1 = substr(random_bytes, 64, 64)
-    let u_0 = field_elem_from_larger_bytearray(&random_bytes[0..L::to_usize()]);
-    let u_1 = field_elem_from_larger_bytearray(&random_bytes[L::to_usize()..]);
+    let mut u_0 = field_elem_from_larger_bytearray(&random_bytes[0..L::to_usize()]);
+    let mut u_1 = field_elem_from_larger_bytearray(&random_bytes[L::to_usize()..]);
+    println!("u0 = {}", u_0.to_hex());
+    println!("u1 = {}", u_1.to_hex());
     Ok((u_0, u_1))
 }
 
@@ -351,14 +370,99 @@ fn field_elem_from_larger_bytearray(random_bytes: &[u8]) -> BIG {
 
 #[cfg(test)]
 mod tests {
-    use crate::DomainSeparationTag;
-    use crate::bls381g1::{hash_to_field_xmd_1, hash_to_field_xmd_2, map_to_curve, map_to_curve_pm3d4};
+    use crate::{DomainSeparationTag, HashToCurve};
+    use crate::bls381g1::{hash_to_field_xmd_1, hash_to_field_xmd_2, map_to_curve, Bls12381G1XmdSha256Sswu};
     use amcl_miracl::bls381::{big::BIG, ecp::ECP};
     use super::MODULUS;
 
     #[ignore]
     #[test]
     fn print_constants() {
+        let mut p = BIG::new_big(&MODULUS);
+        p.rmod(&BIG::new_int(4));
+        println!("p = {}", p.w[0]);
+    }
+
+    #[test]
+    fn hash_to_curve_tests() {
+        let dst = DomainSeparationTag::new("BLS12381G1_XMD:SHA-256_SSWU_RO_",
+                                           Some("TESTGEN"),
+                                           None,
+                                           None).unwrap();
+        let msgs = [
+            "",
+            "abc",
+            "abcdef0123456789",
+            "a512_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        ];
+        let p = [
+            ("045f87745ff759f9197e131ad83d47d635dc36a3e0c7e4a1be5e1effe5e63ac69c8f34e6c3aef9c5cf28224922788367", "06125886a03f883740a078313d5fa6e4a68b9c0394eb75f77c65fc8b44db3f4ef933ac6adf341bc45fabc7907afcb832"),
+            ("009a357691a6f7b2917d9a34ba64d896d40b49733fcb3207f8c146e20fffb47823198a26b6ceeb01215fc3422908020e", "03fe44c894c107a8547826b60f577b90f80c63f899ef9dcff94daadae180ad803609337c9ec97d6d9b8ba306df7a9849"),
+            ("04eb09680fe48598533932907810fb7681e60b3689cb138454bec627490c5089b6dd755556e52a36c3817e98b62d7497", "1763dd8bf6823d9a22124d22a4ab3d93d8a9603ec80b4a40905b26664b16033fa6e73a6155c9bc4c6faa42bf911ffba1"),
+            ("0915842b42c2c4d3b509823c60c1fad834784ff451855f43390b80c3b6985d76aadc6ecfbb4b42a07921410d6821f0bb", "052873ee0b444dd8337ce403636d680cff1e9402b7a1ce2ab210bff11a83fe4e14216fe96efe3f344c1a2ec0fc1b2c5f"),
+        ];
+
+        let blshasher = Bls12381G1XmdSha256Sswu::from(dst);
+
+        for i in 0..msgs.len() {
+            let expected_p = ECP::new_bigs(&BIG::from_hex(p[i].0.to_string()), &BIG::from_hex(p[i].1.to_string()));
+            let actual_p = blshasher.hash_to_curve(msgs[i]);
+            assert!(actual_p.is_ok());
+            let actual_p = actual_p.unwrap();
+            assert_eq!(expected_p, actual_p);
+        }
+    }
+
+    #[test]
+    fn map_to_curve_2_tests() {
+        let dst = DomainSeparationTag::new("BLS12381G1_XMD:SHA-256_SSWU_RO_",
+                                           Some("TESTGEN"),
+                                           None,
+                                           None).unwrap();
+        let msgs = [
+            "",
+            "abc",
+            "abcdef0123456789",
+            "a512_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        ];
+
+        let expected_q = [
+            ("02f2686965a4dd27ccb11119f2e131aefee818744a414d23ecef4db1407991fdf058f0affaee18fd586a9ab81060ae20",
+             "0341a16c88a39b3d111b36b7cf885b7147b1d54b9201faaba5b47d7839bcf433cc35bb1f7b8e55aa9382a52fe4d84370",
+             "1357bddd2bc6c8e752f3cf498ffe29ae87d8ff933701ae76f82d2839b0d9aee5229d4fff54dfb8223be0d88fa4485863",
+             "09ba0ec3c78cf1e65330721f777b529aef27539642c39be11f459106b890ec5eb4a21c5d94885603e822cfa765170857"),
+
+            ("119cc1d21e3e494d388a8718fe9f8ec6d8ff134486ce5c1f97129797616c4b8125f0dc568c59836cbf064496136438bc",
+             "19e6c998825ee57b82c4808e4df477680f0f254c9edce228104422494a4e5d40d11ee676f6b861b6c49cf7de9d777aef",
+             "0d1783f40bd83461b921c3fcd0e9ba326ef75272b122cf44338f0060d7179995a38ea9c66f3ce800e2f693d2634a4524",
+             "017b2566d55fa7ee43844f1fa068cb0a11d5889c11607d939da046697c8ba25cf71054c2a8eb2189d3680485a39f5bdd"),
+
+            ("1614d05720a39379fb89469883f90ae3e50995def9e17f8f8566a3f6cfb4fe88267eac1dc7834406fc597965065ef100",
+             "1060e5aab331ac4940693a936ea80029bb2c4a3945add7ae35bce805e767af827c4a9ffcb5842fbc50ab234716d895f6",
+             "0f612cda21cee750b1ccff361a4ce047e70d9a9e152e96a60aa29b5d8a5dcd25f7c5bd71bb56bd34e6a8af7532afaa4f",
+             "1878f926302468949ef290b4fee621d1172e072eda1b42e366df68fc87f53c35583dbc043009e0b38a04a9b1ff617efe"),
+
+            ("0a817078e7f30f08e94a25c2a1947160db1fe52042626660b8252cd339e678a1fecc0e6da60390a203532bd089a426b6",
+             "097bd5d6ae3f5b5d0ba5e4099485caa2c505a1d900e4525af10254b3927ae0c82611be944ff8fdc6b278aab9e17ee27c",
+             "1098f203da72c58dca61ffd52a3de82603d3154c527df51c2efe6298ea0eeaa065d57ba3a809b5e32d9d56dade119006",
+             "0bcbd9df3505f049476f060c1d1c958fe8b34e426fd7e75424c9e227d9c4d3edbd5eddb8b1e89cc91b4a7bd3275d4d70"),
+        ];
+
+        for i in 0..msgs.len() {
+            let u = hash_to_field_xmd_2::<sha2::Sha256, &str>(msgs[i], &dst).unwrap();
+            let exp_q= ECP::new_bigs(
+                &BIG::from_hex(expected_q[i].0.to_string()),
+                &BIG::from_hex(expected_q[i].1.to_string())
+            );
+            let actual_q = map_to_curve(u.0);
+            assert_eq!(exp_q, actual_q);
+            let exp_q = ECP::new_bigs(
+                &BIG::from_hex(expected_q[i].2.to_string()),
+                &BIG::from_hex(expected_q[i].3.to_string())
+            );
+            let actual_q = map_to_curve(u.1);
+            assert_eq!(exp_q, actual_q);
+        }
     }
 
     // Take from section G.9.2
@@ -388,10 +492,7 @@ mod tests {
                 &BIG::from_hex(q_s[i].1.to_string())
             );
             let actual_q1 = map_to_curve(u);
-            // let actual_q2 = map_to_curve_pm3d4(u);
-            // println!("expected_u = {}", expected_q.to_hex());
-            // println!("actual_q1  = {}", actual_q1.to_hex());
-            // println!("actual_q2  = {}\n", actual_q2.to_hex());
+            assert_eq!(expected_q, actual_q1);
         }
     }
 
