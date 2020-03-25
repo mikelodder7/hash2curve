@@ -1,6 +1,6 @@
 [package]
 authors = ["Michael Lodder <redmike7@gmail.com>"]
-categories = ["cryptography", "elliptic curves", "hash"]
+categories = ["cryptography", "elliptic", "curves", "hash"]
 description = "A suite of hash to curve ECC algorithms"
 documentation = "https://docs.rs/hash2curve"
 edition = "2018"
