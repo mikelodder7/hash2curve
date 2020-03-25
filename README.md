@@ -29,13 +29,52 @@ Below is an outline of the of the suites supported by this crate:
     - [ ] BLS12-381 G2
     
 ## Examples on using the code
+To get started, you must define a `DomainSeparationTag` for your protocol use. 
+According to section 3.1 in [Current IETF Draft](https://datatracker.ietf.org/doc/draft-irtf-cfrg-hash-to-curve/?include_text=1),
+domain separation tags must include a protocol id, and some other options like versioning, ciphersuites, and encoding
+names. 
+
+```rust 
+use hash2curve::DomainSeparationTag
+
+let dst = DomainSeparationTag::new("MySuperAwesomeProtocol", None, None, None).unwrap();
+```
+
+`DomainSeparationTag` requires at least one 1 character otherwise `new` will throw an Err. This tag
+will then be used for creating a hash to curve struct. A good `DomainSeparationTag` according to the [Current IETF Draft](https://datatracker.ietf.org/doc/draft-irtf-cfrg-hash-to-curve/?include_text=1)
+is protocol id = "BLS12381G1_XMD:SHA-256_SSWU_RO_" which translates to mean hash on curve BLS12-381 to a point on G1 using the expand_message_xmd,
+the SHA-256 hash algorithm, the Simple SWU isogeny map, with a random oracle output (the output is indistinguishable from a random string).
+A protocol version might be 1.0, the ciphersuites could be "signatures", and "encoding" could be "base64". Only the protocol id is required. 
+
+Hashers are defined to create points on specific curves. All hashers define at least `HashToCurveXmd` or `HashToCurveXof`.
+
+`HashToCurveXmd` is designed to use cryptographically secure hash functions like SHA-2 or SHA-3. 
+`HashToCurveXof` is designed to use extensible output functions like SHAKE-128.
+Use the appropriate hasher struct for the curve used in your protocol.
+
+Here is an example of creating BLS12-381 point using the hash to curve based on [Apache Milagro](https://github.com/miracl/amcl/tree/master/version3/rust)
 
 ```rust
+use hash2curve::{DomainSeparationTag, HashToCurveXmd, bls381g1::Bls12381G1Sswu};
+
+let dst = DomainSeparationTag::new("BLS12381G1_XMD:SHA-256_SSWU_RO_", Some("0.1.0"), None, None);
+
+let hasher = Bls12381G1Sswu::new(dst);
+
+let msg = "A message to sign";
+
+// sign the message
+let point_on_g1 = hasher.hash_to_curve_xmd::<sha2::Sha256, &str>(msg).unwrap();
+let signature = point_on_g1.mul(&private_key);
 ```
     
 ## Tests
-The tests can be execute by running: `cargo test`
-    
+The tests can be execute by running: `cargo test`. However, since curves are very specific, no curve is enabled by default.
+Instead, the appropriate hasher struct can included using the following:
+
+### Current Features
+
+- bls: `cargo test --features=bls`
 
 # Author
 

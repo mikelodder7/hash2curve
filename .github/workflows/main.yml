@@ -28,3 +28,5 @@ jobs:
         run: cargo build --verbose
       - name: Tests
         run: cargo test --verbose
+      - name: Bls tests
+        run: cargo test -release --features=bls

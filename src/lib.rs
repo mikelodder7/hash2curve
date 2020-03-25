@@ -48,6 +48,12 @@ pub const MAX_DMS_SIZE: usize = 255;
 /// Reasonable choices of tags for the E1 and E2 oracles are "BAZ-V<xx>-
 /// CS<yy>-E1" and "BAZ-V<xx>-CS<yy>-E2", respectively, where <xx> and
 /// <yy> are as described above.
+///
+/// ```
+/// use hash2curve::DomainSeparationTag;
+///
+/// let dst = DomainSeparationTag::new("MySuperAwesomeProtocol", None, None, None).unwrap();
+/// ```
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct DomainSeparationTag {
     /// Fixed protocol identification string.

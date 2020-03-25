@@ -24,49 +24,49 @@ const MODULUS: BIG = BIG {
 };
 const PM1DIV2: BIG = BIG {
     w: [
-        71916856549561685,
-        108086211381297143,
-        186063435852751093,
-        218960087668936289,
-        225643796693662629,
-        229680090418738422,
-        3490221905,
+        71_916_856_549_561_685,
+        108_086_211_381_297_143,
+        186_063_435_852_751_093,
+        218_960_087_668_936_289,
+        225_643_796_693_662_629,
+        229_680_090_418_738_422,
+        3_490_221_905,
     ],
 };
 const H_EFF: BIG = BIG {
-    w: [144396663052632065, 52, 0, 0, 0, 0, 0],
+    w: [144_396_663_052_632_065, 52, 0, 0, 0, 0, 0],
 };
 const C1: BIG = BIG {
     w: [
-        132416828320029820,
-        -36241730206030966,
-        -183175740354038500,
-        -108808289511770161,
-        19716962043635886,
-        150180602526288156,
-        2033276157,
+        132_416_828_320_029_820,
+        -36_241_730_206_030_966,
+        -183_175_740_354_038_500,
+        -108_808_289_511_770_161,
+        19_716_962_043_635_886,
+        150_180_602_526_288_156,
+        2_033_276_157,
     ],
 };
 const C2: BIG = BIG {
     w: [
-        170292360909944894,
-        176868607242987704,
-        7626954141253676,
-        39810925030715689,
-        14823383385055774,
-        15557254971433191,
-        634585801,
+        170_292_360_909_944_894,
+        176_868_607_242_987_704,
+        7_626_954_141_253_676,
+        39_810_925_030_715_689,
+        14_823_383_385_055_774,
+        15_557_254_971_433_191,
+        634_585_801,
     ],
 };
 const SQRT_C1: BIG = BIG {
     w: [
-        180073616350636715,
-        198158293766504443,
-        237146906002231418,
-        253595231910324016,
-        112821898346831314,
-        258955233285225083,
-        1745110952,
+        180_073_616_350_636_715,
+        198_158_293_766_504_443,
+        237_146_906_002_231_418,
+        253_595_231_910_324_016,
+        112_821_898_346_831_314,
+        258_955_233_285_225_083,
+        1_745_110_952,
     ],
 };
 
@@ -79,11 +79,15 @@ pub struct Bls12381G1Sswu {
 
 impl Bls12381G1Sswu {
     /// Create a new implementation with the default
-    pub fn new(dst: DomainSeparationTag) -> Self { Self { dst } }
+    pub fn new(dst: DomainSeparationTag) -> Self {
+        Self { dst }
+    }
 }
 
 impl From<DomainSeparationTag> for Bls12381G1Sswu {
-    fn from(dst: DomainSeparationTag) -> Self { Self { dst } }
+    fn from(dst: DomainSeparationTag) -> Self {
+        Self { dst }
+    }
 }
 
 impl HashToCurveXmd for Bls12381G1Sswu {
@@ -386,13 +390,12 @@ fn hash_to_field_xof_ro<
 fn field_elem_from_larger_bytearray(random_bytes: &[u8]) -> BIG {
     // e_j = OS2IP(tv) mod p
     let mut d = DBIG::new();
-    for i in 0..random_bytes.len() {
+    for i in random_bytes {
         d.shl(8);
-        d.w[0] += random_bytes[i] as amcl_miracl::arch::Chunk;
+        d.w[0] += *i as amcl_miracl::arch::Chunk;
     }
     // u = (e_0, ..., e_( m - 1 ) )
-    let u = d.dmod(&MODULUS);
-    u
+    d.dmod(&MODULUS)
 }
 
 #[cfg(test)]
@@ -447,7 +450,7 @@ mod tests {
             None,
             None,
         )
-            .unwrap();
+        .unwrap();
         let msgs = [
             "",
             "abc",
@@ -468,7 +471,8 @@ mod tests {
                 &BIG::from_hex(p[i].0.to_string()),
                 &BIG::from_hex(p[i].1.to_string()),
             );
-            let actual_p = blshasher.hash_to_curve_xof::<sha3::Shake128, sha3::Sha3_256, &str>(msgs[i]);
+            let actual_p =
+                blshasher.hash_to_curve_xof::<sha3::Shake128, sha3::Sha3_256, &str>(msgs[i]);
             assert!(actual_p.is_ok());
             let actual_p = actual_p.unwrap();
             assert_eq!(expected_p, actual_p);
