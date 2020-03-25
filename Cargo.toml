@@ -6,6 +6,7 @@ documentation = "https://docs.rs/hash2curve"
 edition = "2018"
 include = [
     "src/**.rs",
+    "src/isogeny/**.rs",
     "Cargo.toml",
     "CHANGELOG",
     "CODEOWNERS",
