@@ -6,6 +6,9 @@ documentation = "https://docs.rs/hash2curve"
 edition = "2018"
 exclude = [
     "Cargo.lock",
+    ".github/**",
+    ".gitignore",
+    "rustfmt.toml",
     "tests/**"
 ]
 license = "Apache-2.0"
