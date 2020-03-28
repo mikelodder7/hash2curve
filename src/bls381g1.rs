@@ -93,19 +93,19 @@ impl From<DomainSeparationTag> for Bls12381G1Sswu {
 impl HashToCurveXmd for Bls12381G1Sswu {
     type Output = ECP;
 
-    fn encode_to_curve_xmd<D: BlockInput + Digest<OutputSize = U32>, I: AsRef<[u8]>>(
+    fn encode_to_curve_xmd<D: BlockInput + Digest<OutputSize = U32>>(
         &self,
-        data: I,
+        data: &[u8],
     ) -> Result<Self::Output, HashingError> {
-        let u = hash_to_field_xmd_nu::<D, I>(data, &self.dst)?;
+        let u = hash_to_field_xmd_nu::<D>(data, &self.dst)?;
         Ok(encode_to_curve(u))
     }
 
-    fn hash_to_curve_xmd<D: BlockInput + Digest<OutputSize = U32>, I: AsRef<[u8]>>(
+    fn hash_to_curve_xmd<D: BlockInput + Digest<OutputSize = U32>>(
         &self,
-        data: I,
+        data: &[u8],
     ) -> Result<Self::Output, HashingError> {
-        let (u0, u1) = hash_to_field_xmd_ro::<D, I>(data, &self.dst)?;
+        let (u0, u1) = hash_to_field_xmd_ro::<D>(data, &self.dst)?;
         Ok(hash_to_curve(u0, u1))
     }
 }
@@ -116,24 +116,22 @@ impl HashToCurveXof for Bls12381G1Sswu {
     fn encode_to_curve_xof<
         X: ExtendableOutput + Input + Reset + Default,
         D: Digest<OutputSize = U32>,
-        I: AsRef<[u8]>,
     >(
         &self,
-        data: I,
+        data: &[u8],
     ) -> Result<Self::Output, HashingError> {
-        let u = hash_to_field_xof_nu::<X, D, I>(data, &self.dst)?;
+        let u = hash_to_field_xof_nu::<X, D>(data, &self.dst)?;
         Ok(encode_to_curve(u))
     }
 
     fn hash_to_curve_xof<
         X: ExtendableOutput + Input + Reset + Default,
         D: Digest<OutputSize = U32>,
-        I: AsRef<[u8]>,
     >(
         &self,
-        data: I,
+        data: &[u8],
     ) -> Result<Self::Output, HashingError> {
-        let (u0, u1) = hash_to_field_xof_ro::<X, D, I>(data, &self.dst)?;
+        let (u0, u1) = hash_to_field_xof_ro::<X, D>(data, &self.dst)?;
         Ok(hash_to_curve(u0, u1))
     }
 }
@@ -316,12 +314,12 @@ fn iso_map_helper(x: &[BIG], k: &[BIG]) -> BIG {
 
 /// Hash to field using expand_message_xmd to compute `u` as specified in Section 5.2 in
 /// <https://datatracker.ietf.org/doc/draft-irtf-cfrg-hash-to-curve/?include_text=1>
-fn hash_to_field_xmd_nu<D: BlockInput + Digest<OutputSize = U32>, M: AsRef<[u8]>>(
-    msg: M,
+fn hash_to_field_xmd_nu<D: BlockInput + Digest<OutputSize = U32>>(
+    msg: &[u8],
     dst: &DomainSeparationTag,
 ) -> Result<BIG, HashingError> {
     // length_in_bytes = count * m * L = 1 * 1 * 64 = 64
-    let random_bytes = expand_message_xmd::<M, D, L>(msg, dst)?;
+    let random_bytes = expand_message_xmd::<D, L>(msg, dst)?;
     // elm_offset = L * (j + i * m) = 64 * (0 + 0 * 1) = 0
     // tv = substr(random_bytes, 0, 64)
     Ok(field_elem_from_larger_bytearray(random_bytes.as_slice()))
@@ -331,12 +329,12 @@ fn hash_to_field_xmd_nu<D: BlockInput + Digest<OutputSize = U32>, M: AsRef<[u8]>
 /// <https://datatracker.ietf.org/doc/draft-irtf-cfrg-hash-to-curve/?include_text=1>
 ///
 /// We avoid the loop and get compile time checking this way
-fn hash_to_field_xmd_ro<D: BlockInput + Digest<OutputSize = U32>, M: AsRef<[u8]>>(
-    msg: M,
+fn hash_to_field_xmd_ro<D: BlockInput + Digest<OutputSize = U32>>(
+    msg: &[u8],
     dst: &DomainSeparationTag,
 ) -> Result<(BIG, BIG), HashingError> {
     // length_in_bytes = count * m * L = 2 * 1 * 64 = 128
-    let random_bytes = expand_message_xmd::<M, D, TwoL>(msg, dst)?;
+    let random_bytes = expand_message_xmd::<D, TwoL>(msg, dst)?;
     // elm_offset_0 = L * (j + i * m) = 64 * (0 + 0 * 1) = 0
     // elm_offset_1 = L * (j + i * m) = 64 * (0 + 1 * 1) = 64
     // tv_0 = substr(random_bytes, 0, 64)
@@ -351,13 +349,12 @@ fn hash_to_field_xmd_ro<D: BlockInput + Digest<OutputSize = U32>, M: AsRef<[u8]>
 fn hash_to_field_xof_nu<
     X: ExtendableOutput + Input + Reset + Default,
     D: Digest<OutputSize = U32>,
-    M: AsRef<[u8]>,
 >(
-    msg: M,
+    msg: &[u8],
     dst: &DomainSeparationTag,
 ) -> Result<BIG, HashingError> {
     // length_in_bytes = count * m * L = 1 * 1 * 64 = 64
-    let random_bytes = expand_message_xof::<M, X, D, L>(msg, dst)?;
+    let random_bytes = expand_message_xof::<X, D, L>(msg, dst)?;
     // elm_offset = L * (j + i * m) = 64 * (0 + 0 * 1) = 0
     // tv = substr(random_bytes, 0, 64)
     Ok(field_elem_from_larger_bytearray(random_bytes.as_slice()))
@@ -370,13 +367,12 @@ fn hash_to_field_xof_nu<
 fn hash_to_field_xof_ro<
     X: ExtendableOutput + Input + Reset + Default,
     D: Digest<OutputSize = U32>,
-    M: AsRef<[u8]>,
 >(
-    msg: M,
+    msg: &[u8],
     dst: &DomainSeparationTag,
 ) -> Result<(BIG, BIG), HashingError> {
     // length_in_bytes = count * m * L = 2 * 1 * 64 = 128
-    let random_bytes = expand_message_xof::<M, X, D, TwoL>(msg, dst)?;
+    let random_bytes = expand_message_xof::<X, D, TwoL>(msg, dst)?;
     // elm_offset_0 = L * (j + i * m) = 64 * (0 + 0 * 1) = 0
     // elm_offset_1 = L * (j + i * m) = 64 * (0 + 1 * 1) = 64
     // tv_0 = substr(random_bytes, 0, 64)
@@ -409,8 +405,8 @@ mod tests {
     #[test]
     fn hash_to_curve_xmd_tests() {
         let dst = DomainSeparationTag::new(
-            "BLS12381G1_XMD:SHA-256_SSWU_RO_",
-            Some("TESTGEN"),
+            b"BLS12381G1_XMD:SHA-256_SSWU_RO_",
+            Some(b"TESTGEN"),
             None,
             None,
         )
@@ -435,7 +431,7 @@ mod tests {
                 &BIG::from_hex(p[i].0.to_string()),
                 &BIG::from_hex(p[i].1.to_string()),
             );
-            let actual_p = blshasher.hash_to_curve_xmd::<sha2::Sha256, &str>(msgs[i]);
+            let actual_p = blshasher.hash_to_curve_xmd::<sha2::Sha256>(msgs[i].as_bytes());
             assert!(actual_p.is_ok());
             let actual_p = actual_p.unwrap();
             assert_eq!(expected_p, actual_p);
@@ -445,8 +441,8 @@ mod tests {
     #[test]
     fn hash_to_curve_xof_tests() {
         let dst = DomainSeparationTag::new(
-            "BLS12381G1_XOF:SHAKE-128_SSWU_RO_",
-            Some("TESTGEN"),
+            b"BLS12381G1_XOF:SHAKE-128_SSWU_RO_",
+            Some(b"TESTGEN"),
             None,
             None,
         )
@@ -472,7 +468,7 @@ mod tests {
                 &BIG::from_hex(p[i].1.to_string()),
             );
             let actual_p =
-                blshasher.hash_to_curve_xof::<sha3::Shake128, sha3::Sha3_256, &str>(msgs[i]);
+                blshasher.hash_to_curve_xof::<sha3::Shake128, sha3::Sha3_256>(msgs[i].as_bytes());
             assert!(actual_p.is_ok());
             let actual_p = actual_p.unwrap();
             assert_eq!(expected_p, actual_p);
@@ -482,8 +478,8 @@ mod tests {
     #[test]
     fn encode_to_curve_xmd_tests() {
         let dst = DomainSeparationTag::new(
-            "BLS12381G1_XMD:SHA-256_SSWU_NU_",
-            Some("TESTGEN"),
+            b"BLS12381G1_XMD:SHA-256_SSWU_NU_",
+            Some(b"TESTGEN"),
             None,
             None,
         )
@@ -508,7 +504,7 @@ mod tests {
                 &BIG::from_hex(p[i].0.to_string()),
                 &BIG::from_hex(p[i].1.to_string()),
             );
-            let actual_p = blshasher.encode_to_curve_xmd::<sha2::Sha256, &str>(msgs[i]);
+            let actual_p = blshasher.encode_to_curve_xmd::<sha2::Sha256>(msgs[i].as_bytes());
             assert!(actual_p.is_ok());
             let actual_p = actual_p.unwrap();
             assert_eq!(expected_p, actual_p);
@@ -518,8 +514,8 @@ mod tests {
     #[test]
     fn map_to_curve_ro_tests() {
         let dst = DomainSeparationTag::new(
-            "BLS12381G1_XMD:SHA-256_SSWU_RO_",
-            Some("TESTGEN"),
+            b"BLS12381G1_XMD:SHA-256_SSWU_RO_",
+            Some(b"TESTGEN"),
             None,
             None,
         )
@@ -554,7 +550,7 @@ mod tests {
         ];
 
         for i in 0..msgs.len() {
-            let u = hash_to_field_xmd_ro::<sha2::Sha256, &str>(msgs[i], &dst).unwrap();
+            let u = hash_to_field_xmd_ro::<sha2::Sha256>(msgs[i].as_bytes(), &dst).unwrap();
             let exp_q = ECP::new_bigs(
                 &BIG::from_hex(expected_q[i].0.to_string()),
                 &BIG::from_hex(expected_q[i].1.to_string()),
@@ -574,8 +570,8 @@ mod tests {
     #[test]
     fn map_to_curve_nu_tests() {
         let dst = DomainSeparationTag::new(
-            "BLS12381G1_XMD:SHA-256_SSWU_NU_",
-            Some("TESTGEN"),
+            b"BLS12381G1_XMD:SHA-256_SSWU_NU_",
+            Some(b"TESTGEN"),
             None,
             None,
         )
@@ -594,7 +590,7 @@ mod tests {
         ];
 
         for i in 0..msgs.len() {
-            let u = hash_to_field_xmd_nu::<sha2::Sha256, &str>(msgs[i], &dst).unwrap();
+            let u = hash_to_field_xmd_nu::<sha2::Sha256>(msgs[i].as_bytes(), &dst).unwrap();
             let expected_q = ECP::new_bigs(
                 &BIG::from_hex(q_s[i].0.to_string()),
                 &BIG::from_hex(q_s[i].1.to_string()),
@@ -608,8 +604,8 @@ mod tests {
     #[test]
     fn hash_to_field_xmd_nu_tests() {
         let dst = DomainSeparationTag::new(
-            "BLS12381G1_XMD:SHA-256_SSWU_NU_",
-            Some("TESTGEN"),
+            b"BLS12381G1_XMD:SHA-256_SSWU_NU_",
+            Some(b"TESTGEN"),
             None,
             None,
         )
@@ -629,7 +625,7 @@ mod tests {
 
         for i in 0..msgs.len() {
             let expected_u = BIG::from_hex(executed_u_s[i].to_string());
-            let actual_u = hash_to_field_xmd_nu::<sha2::Sha256, &str>(msgs[i], &dst);
+            let actual_u = hash_to_field_xmd_nu::<sha2::Sha256>(msgs[i].as_bytes(), &dst);
             assert!(actual_u.is_ok());
             assert_eq!(actual_u.unwrap(), expected_u);
         }
@@ -639,8 +635,8 @@ mod tests {
     #[test]
     fn hash_to_field_xmd_ro_tests() {
         let dst = DomainSeparationTag::new(
-            "BLS12381G1_XMD:SHA-256_SSWU_RO_",
-            Some("TESTGEN"),
+            b"BLS12381G1_XMD:SHA-256_SSWU_RO_",
+            Some(b"TESTGEN"),
             None,
             None,
         )
@@ -661,7 +657,7 @@ mod tests {
         for i in 0..msgs.len() {
             let expected_u0 = BIG::from_hex(expected_u_s[i].0.to_string());
             let expected_u1 = BIG::from_hex(expected_u_s[i].1.to_string());
-            let res = hash_to_field_xmd_ro::<sha2::Sha256, &str>(msgs[i], &dst);
+            let res = hash_to_field_xmd_ro::<sha2::Sha256>(msgs[i].as_bytes(), &dst);
             assert!(res.is_ok());
             let (actual_u0, actual_u1) = res.unwrap();
             assert_eq!(actual_u0, expected_u0);

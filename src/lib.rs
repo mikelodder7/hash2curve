@@ -52,42 +52,48 @@ pub const MAX_DMS_SIZE: usize = 255;
 /// ```
 /// use hash2curve::DomainSeparationTag;
 ///
-/// let dst = DomainSeparationTag::new("MySuperAwesomeProtocol", None, None, None).unwrap();
+/// let dst = DomainSeparationTag::new(b"MySuperAwesomeProtocol", None, None, None);
+///
+/// assert!(dst.is_ok());
+///
+/// let dst = DomainSeparationTag::new(b"", None, None, None);
+///
+/// assert!(dst.is_err());
 /// ```
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct DomainSeparationTag {
     /// Fixed protocol identification string.
     /// This identification string should be unique to the protocol.
-    protocol_id: String,
+    protocol_id: Vec<u8>,
     /// Protocol version number, can be any format 1, 01, 1.0, 2.0.2
-    protocol_version: String,
+    protocol_version: Vec<u8>,
     /// For protocols that define multiple ciphersuites, each
     /// ciphersuite's tag MUST be different.  For this purpose, it is
     /// RECOMMENDED to include a ciphersuite identifier in each tag.
-    ciphersuite_id: String,
+    ciphersuite_id: Vec<u8>,
     /// For protocols that use multiple encodings, either to the same
     /// curve or to different curves, each encoding MUST use a different
     /// tag.  For this purpose, it is RECOMMENDED to include the
     /// encoding's Suite ID (Section 8) in the domain separation tag.
     /// For independent encodings based on the same suite, each tag
     /// should also include a distinct identifier.
-    encoding_id: String,
+    encoding_id: Vec<u8>,
 }
 
 impl DomainSeparationTag {
     /// Convenience function for creating a domain separation tag
     pub fn new(
-        protocol_id: &str,
-        protocol_version: Option<&str>,
-        ciphersuite_id: Option<&str>,
-        encoding_id: Option<&str>,
+        protocol_id: &[u8],
+        protocol_version: Option<&[u8]>,
+        ciphersuite_id: Option<&[u8]>,
+        encoding_id: Option<&[u8]>,
     ) -> Result<Self, HashingError> {
         Self::check_min_length(protocol_id)?;
         let dms = Self {
-            protocol_id: protocol_id.to_string(),
-            protocol_version: protocol_version.unwrap_or("").to_string(),
-            ciphersuite_id: ciphersuite_id.unwrap_or("").to_string(),
-            encoding_id: encoding_id.unwrap_or("").to_string(),
+            protocol_id: protocol_id.to_vec(),
+            protocol_version: protocol_version.map_or_else(|| Vec::new(), |p| p.to_vec()),
+            ciphersuite_id: ciphersuite_id.map_or_else(|| Vec::new(), |c| c.to_vec()),
+            encoding_id: encoding_id.map_or_else(|| Vec::new(), |e| e.to_vec()),
         };
         Ok(dms)
     }
@@ -97,23 +103,21 @@ impl DomainSeparationTag {
     /// imposed by an invoking protocol), this computes the
     /// H("H2C-OVERSIZE-DST-" || protocol_id || procotol_version || ciphersuite_id || encoding_id)
     /// `D` must be a cryptographically secure hash function like SHA256, SHA3-256, or BLAKE2.
-    pub fn to_bytes<D: Digest<OutputSize = U32>>(&self) -> Result<Vec<u8>, HashingError> {
-        Self::check_min_length(&self.protocol_id)?;
-
+    pub fn to_bytes<D: Digest<OutputSize = U32>>(&self) -> Vec<u8> {
         let output = self.to_slice();
 
         if output.len() > MAX_DMS_SIZE {
             let mut hasher = D::new();
             hasher.input(b"H2C-OVERSIZE-DST-");
             hasher.input(output.as_slice());
-            Ok(hasher.result().to_vec())
+            hasher.result().to_vec()
         } else {
-            Ok(output)
+            output
         }
     }
 
     /// Check that there is at least `MIN_DMS_PROTOCOL_ID_SIZE` bytes in the domain separation tag.
-    fn check_min_length(protocol_id: &str) -> Result<(), HashingError> {
+    fn check_min_length(protocol_id: &[u8]) -> Result<(), HashingError> {
         if protocol_id.len() < MIN_DMS_PROTOCOL_ID_SIZE {
             return Err(HashingError::from_msg(
                 HashingErrorKind::InvalidDomainSeparationTag,
@@ -129,10 +133,10 @@ impl DomainSeparationTag {
     /// Convert all the fields into a byte array
     fn to_slice(&self) -> Vec<u8> {
         let mut output = Vec::new();
-        output.extend_from_slice(self.protocol_id.as_bytes());
-        output.extend_from_slice(self.protocol_version.as_bytes());
-        output.extend_from_slice(self.ciphersuite_id.as_bytes());
-        output.extend_from_slice(self.encoding_id.as_bytes());
+        output.extend_from_slice(self.protocol_id.as_slice());
+        output.extend_from_slice(self.protocol_version.as_slice());
+        output.extend_from_slice(self.ciphersuite_id.as_slice());
+        output.extend_from_slice(self.encoding_id.as_slice());
         output
     }
 }
@@ -144,18 +148,18 @@ pub trait HashToCurveXmd {
     /// Nonuniform encoding.  This function encodes byte
     /// strings to points in G.  The distribution of the output is not
     /// uniformly random in G.
-    fn encode_to_curve_xmd<D: BlockInput + Digest<OutputSize = U32>, I: AsRef<[u8]>>(
+    fn encode_to_curve_xmd<D: BlockInput + Digest<OutputSize = U32>>(
         &self,
-        data: I,
+        data: &[u8],
     ) -> Result<Self::Output, HashingError>;
 
     /// Random oracle encoding (hash_to_curve).  This function encodes
     /// byte strings to points in G.  This function is suitable for
     /// applications requiring a random oracle returning points in G,
     /// provided that map_to_curve is "well distributed".
-    fn hash_to_curve_xmd<D: BlockInput + Digest<OutputSize = U32>, I: AsRef<[u8]>>(
+    fn hash_to_curve_xmd<D: BlockInput + Digest<OutputSize = U32>>(
         &self,
-        data: I,
+        data: &[u8],
     ) -> Result<Self::Output, HashingError>;
 }
 
@@ -170,10 +174,9 @@ pub trait HashToCurveXof {
     fn encode_to_curve_xof<
         X: ExtendableOutput + Input + Reset + Default,
         D: Digest<OutputSize = U32>,
-        I: AsRef<[u8]>,
     >(
         &self,
-        data: I,
+        data: &[u8],
     ) -> Result<Self::Output, HashingError>;
 
     /// Random oracle encoding (hash_to_curve).  This function encodes
@@ -183,10 +186,9 @@ pub trait HashToCurveXof {
     fn hash_to_curve_xof<
         X: ExtendableOutput + Input + Reset + Default,
         D: Digest<OutputSize = U32>,
-        I: AsRef<[u8]>,
     >(
         &self,
-        data: I,
+        data: &[u8],
     ) -> Result<Self::Output, HashingError>;
 }
 
@@ -196,12 +198,11 @@ const MAX_EXPAND_MESSAGE_REQUEST: usize = 255;
 /// Implements the `expand_message_xof` as described in section 5.3.2 at
 /// <https://datatracker.ietf.org/doc/draft-irtf-cfrg-hash-to-curve/?include_text=1>
 /// computes hash function `D` from `msg` and the tag
-pub(crate) fn expand_message_xof<M, X, D, T>(
-    msg: M,
+pub(crate) fn expand_message_xof<X, D, T>(
+    msg: &[u8],
     dst: &DomainSeparationTag,
 ) -> Result<GenericArray<u8, T>, HashingError>
 where
-    M: AsRef<[u8]>,
     X: ExtendableOutput + Input + Reset + Default,
     D: Digest<OutputSize = U32>,
     T: ArrayLength<u8>,
@@ -213,7 +214,7 @@ where
         ));
     }
 
-    let mut dst_prime = dst.to_bytes::<D>()?;
+    let mut dst_prime = dst.to_bytes::<D>();
     dst_prime.insert(0, dst_prime.len() as u8); //I2OSP(len(DST), 1) || DST
     let mut hasher = X::default();
     hasher.input(msg.as_ref());
@@ -227,12 +228,11 @@ where
 /// Implements the `expand_message_xmd` as described in section 5.3.1 at
 /// <https://datatracker.ietf.org/doc/draft-irtf-cfrg-hash-to-curve/?include_text=1>
 /// computes hash function `D` from `msg` and the tag
-pub(crate) fn expand_message_xmd<M, D, T>(
-    msg: M,
+pub(crate) fn expand_message_xmd<D, T>(
+    msg: &[u8],
     dst: &DomainSeparationTag,
 ) -> Result<GenericArray<u8, T>, HashingError>
 where
-    M: AsRef<[u8]>,
     D: BlockInput + Digest<OutputSize = U32>,
     T: ArrayLength<u8>,
 {
@@ -252,11 +252,11 @@ where
             ),
         ));
     }
-    let mut dst_prime = dst.to_bytes::<D>()?;
+    let mut dst_prime = dst.to_bytes::<D>();
     dst_prime.insert(0, dst_prime.len() as u8); //I2OSP(len(DST), 1) || DST
     let mut hasher = D::new();
     hasher.input(vec![0u8; D::BlockSize::to_usize()]); //z_pad = I2OSP(0, r_in_bytes)
-    hasher.input(msg.as_ref());
+    hasher.input(msg);
     hasher.input(T::to_u16().to_be_bytes()); //l_i_b_str = I2OSP(len_in_bytes, 2)
     hasher.input([0u8]); //I2OSP(0, 1)
     hasher.input(dst_prime.as_slice());
