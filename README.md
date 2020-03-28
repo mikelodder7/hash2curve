@@ -37,7 +37,7 @@ names.
 ```rust 
 use hash2curve::DomainSeparationTag
 
-let dst = DomainSeparationTag::new("MySuperAwesomeProtocol", None, None, None).unwrap();
+let dst = DomainSeparationTag::new(b"MySuperAwesomeProtocol", None, None, None).unwrap();
 ```
 
 `DomainSeparationTag` requires at least one 1 character otherwise `new` will throw an Err. This tag
@@ -57,15 +57,18 @@ Here is an example of creating BLS12-381 point using the hash to curve based on 
 ```rust
 use hash2curve::{DomainSeparationTag, HashToCurveXmd, bls381g1::Bls12381G1Sswu};
 
-let dst = DomainSeparationTag::new("BLS12381G1_XMD:SHA-256_SSWU_RO_", Some("0.1.0"), None, None);
+let dst = DomainSeparationTag::new(b"BLS12381G1_XMD:SHA-256_SSWU_RO_", Some(b"0.1.0"), None, None).unwrap();
 
 let hasher = Bls12381G1Sswu::new(dst);
 
-let msg = "A message to sign";
+let msg = b"A message to sign";
 
-// sign the message
-let point_on_g1 = hasher.hash_to_curve_xmd::<sha2::Sha256, &str>(msg).unwrap();
+// sign the message assuming signatures are in G1 like tiny BLS
+let point_on_g1 = hasher.hash_to_curve_xmd::<sha2::Sha256>(msg);
 let signature = point_on_g1.mul(&private_key);
+
+// Or extract the bytes or save as hexstring
+let point_on_g1 = hasher.hash_to_curve_xmd::<sha2::Sha256>(msg);
 ```
     
 ## Tests

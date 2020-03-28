@@ -7,12 +7,19 @@ use crate::error::HashingError;
 use crate::isogeny::bls381g1::*;
 use crate::{expand_message_xmd, expand_message_xof, DomainSeparationTag};
 use crate::{HashToCurveXmd, HashToCurveXof};
-use amcl_miracl::bls381::{big::BIG, dbig::DBIG, ecp::ECP};
+use amcl_miracl::arch::Chunk;
+use amcl_miracl::bls381::{big::BIG, dbig::DBIG, ecp::ECP, rom};
+use digest::generic_array::GenericArray;
 use digest::{
-    generic_array::typenum::{marker_traits::Unsigned, U128, U32, U64},
+    generic_array::typenum::{marker_traits::Unsigned, U128, U32, U48, U64, U96},
     BlockInput, Digest, ExtendableOutput, Input, Reset,
 };
-use std::cmp::Ordering;
+use failure::_core::fmt::Debug;
+use std::{
+    cmp::Ordering,
+    fmt::{Display, Formatter, Result as FmtResult},
+    str::FromStr,
+};
 
 /// To compute a `L` use the following formula
 /// L = ceil(ceil(log2(p) + k) / 8). For example, in our case log2(p) = 381, k = 128
@@ -91,14 +98,14 @@ impl From<DomainSeparationTag> for Bls12381G1Sswu {
 }
 
 impl HashToCurveXmd for Bls12381G1Sswu {
-    type Output = ECP;
+    type Output = G1;
 
     fn encode_to_curve_xmd<D: BlockInput + Digest<OutputSize = U32>>(
         &self,
         data: &[u8],
     ) -> Result<Self::Output, HashingError> {
         let u = hash_to_field_xmd_nu::<D>(data, &self.dst)?;
-        Ok(encode_to_curve(u))
+        Ok(encode_to_curve(u).into())
     }
 
     fn hash_to_curve_xmd<D: BlockInput + Digest<OutputSize = U32>>(
@@ -106,19 +113,19 @@ impl HashToCurveXmd for Bls12381G1Sswu {
         data: &[u8],
     ) -> Result<Self::Output, HashingError> {
         let (u0, u1) = hash_to_field_xmd_ro::<D>(data, &self.dst)?;
-        Ok(hash_to_curve(u0, u1))
+        Ok(hash_to_curve(u0, u1).into())
     }
 }
 
 impl HashToCurveXof for Bls12381G1Sswu {
-    type Output = ECP;
+    type Output = G1;
 
     fn encode_to_curve_xof<X: ExtendableOutput + Input + Reset + Default>(
         &self,
         data: &[u8],
     ) -> Result<Self::Output, HashingError> {
         let u = hash_to_field_xof_nu::<X>(data, &self.dst)?;
-        Ok(encode_to_curve(u))
+        Ok(encode_to_curve(u).into())
     }
 
     fn hash_to_curve_xof<X: ExtendableOutput + Input + Reset + Default>(
@@ -126,7 +133,168 @@ impl HashToCurveXof for Bls12381G1Sswu {
         data: &[u8],
     ) -> Result<Self::Output, HashingError> {
         let (u0, u1) = hash_to_field_xof_ro::<X>(data, &self.dst)?;
-        Ok(hash_to_curve(u0, u1))
+        Ok(hash_to_curve(u0, u1).into())
+    }
+}
+
+/// Represents a point on G1
+#[derive(Copy, Clone)]
+pub struct G1(ECP);
+
+impl G1 {
+    /// The bytes in G1 compressed form
+    pub const COMPRESSED_BYTES: usize = rom::MODBYTES;
+    /// The bytes in G1 uncompressed form
+    pub const UNCOMPRESSED_BYTES: usize = 2 * rom::MODBYTES;
+    const ECP_COMPRESSED: usize = Self::COMPRESSED_BYTES + 1;
+    const ECP_UNCOMPRESSED: usize = Self::UNCOMPRESSED_BYTES + 1;
+    const COMPRESSED_HEX_LENGTH: usize = Self::UNCOMPRESSED_BYTES;
+    const UNCOMPRESSED_HEX_LENGTH: usize = Self::UNCOMPRESSED_BYTES * 2;
+
+    /// Serialize the point to compressed bytes in big endian form
+    /// Only the x-coordinate
+    ///
+    /// NOTE: Must use `GenericArray` due to rust error
+    /// error[E0277]: arrays only have std trait implementations for lengths 0..=32
+    pub fn to_bytes(&self) -> GenericArray<u8, U48> {
+        let mut bytes = [0u8; Self::ECP_COMPRESSED];
+        let mut temp = ECP::new();
+        temp.copy(&self.0);
+        temp.tobytes(bytes.as_mut(), true);
+        GenericArray::clone_from_slice(&bytes[1..])
+    }
+
+    /// Serialize the point to uncompressed bytes in big endian form
+    /// The x-coordinate followed by the y-coordinate
+    /// NOTE: Must use `GenericArray` due to rust error
+    /// error[E0277]: arrays only have std trait implementations for lengths 0..=32
+    pub fn to_bytes_uncompressed(&self) -> GenericArray<u8, U96> {
+        let mut bytes = [0u8; Self::ECP_UNCOMPRESSED];
+        let mut temp = ECP::new();
+        temp.copy(&self.0);
+        temp.tobytes(bytes.as_mut(), false);
+        GenericArray::clone_from_slice(&bytes[1..])
+    }
+
+    /// Serialize the point to compressed lower hex string
+    /// Only the x-coordinate
+    pub fn encode_to_hex(&self) -> String {
+        String::from_utf8(subtle_encoding::hex::encode(self.to_bytes())).unwrap()
+    }
+
+    /// Serialize the point to uncompressed lower hex string
+    /// The x-coordinate followed by the y-coordinate
+    pub fn encode_to_hex_uncompressed(&self) -> String {
+        String::from_utf8(subtle_encoding::hex::encode(self.to_bytes_uncompressed())).unwrap()
+    }
+
+    /// Helper function for `Display` and `Debug`
+    fn format(&self, f: &mut Formatter<'_>) -> FmtResult {
+        let mut x = self.0.getx();
+        let mut y = self.0.gety();
+        write!(f, "G1 {{ x: {}, y: {} }}", x.to_hex(), y.to_hex())
+    }
+}
+
+impl PartialEq<ECP> for G1 {
+    fn eq(&self, other: &ECP) -> bool {
+        self.0.eq(other)
+    }
+}
+
+impl From<ECP> for G1 {
+    fn from(p: ECP) -> Self {
+        Self(p)
+    }
+}
+
+/// Deserialize the point from a compressed x-coordinate in big endian form
+impl From<GenericArray<u8, U48>> for G1 {
+    fn from(bytes: GenericArray<u8, U48>) -> Self {
+        let x = BIG::frombytes(&bytes[..]);
+        Self(ECP::new_big(&x))
+    }
+}
+
+/// Deserialize the point from x and y coordinates in big endian form
+impl From<GenericArray<u8, U96>> for G1 {
+    fn from(bytes: GenericArray<u8, U96>) -> Self {
+        let x = BIG::frombytes(&bytes[..rom::MODBYTES]);
+        let y = BIG::frombytes(&bytes[rom::MODBYTES..]);
+        Self(ECP::new_bigs(&x, &y))
+    }
+}
+
+/// Deserialize from a hex string. If the hex string is `COMPRESSED_HEX_LENGTH`
+/// It will assume compressed form––x-coordinate only.
+///
+/// If the hex string is `UNCOMPRESSED_HEX_LENGTH`, it assumes uncompressed form––
+/// x and y coordinates
+impl FromStr for G1 {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        // This is best effort constant time execution.
+        // Constant time is important as hex is used during serialization and deserialization.
+        // A seemingly effortless solution is to filter string for errors and pad with 0s before
+        // passing to AMCL but that would be expensive as the string is scanned twice
+        let mut val = s.to_lowercase();
+        // Given hex cannot be bigger than max byte size
+        if val.len() > Self::UNCOMPRESSED_HEX_LENGTH {
+            return Err(format!(
+                "Expected length '{}', found '{}'",
+                val.len(),
+                Self::UNCOMPRESSED_HEX_LENGTH
+            ));
+        }
+
+        // Pad the string for constant time parsing.
+        if Self::COMPRESSED_HEX_LENGTH < val.len() && val.len() < Self::UNCOMPRESSED_HEX_LENGTH {
+            while val.len() < Self::UNCOMPRESSED_HEX_LENGTH {
+                val.insert(0, '0');
+            }
+        } else {
+            while val.len() < Self::COMPRESSED_HEX_LENGTH {
+                val.insert(0, '0');
+            }
+        }
+
+        let bytes = match subtle_encoding::hex::decode(val) {
+            Ok(b) => b,
+            Err(e) => return Err(format!("{}", e)),
+        };
+
+        let mut x = BIG::new();
+        x.w[0] += bytes[0] as Chunk;
+        for i in 1..Self::COMPRESSED_BYTES {
+            x.fshl(8);
+            x.w[0] += bytes[i] as Chunk;
+        }
+
+        if bytes.len() > Self::COMPRESSED_BYTES {
+            let mut y = BIG::new();
+            y.w[0] = bytes[Self::COMPRESSED_BYTES] as Chunk;
+
+            for i in (Self::COMPRESSED_BYTES + 1)..Self::UNCOMPRESSED_BYTES {
+                y.fshl(8);
+                y.w[0] += bytes[i] as Chunk;
+            }
+            Ok(Self(ECP::new_bigs(&x, &y)))
+        } else {
+            Ok(Self(ECP::new_big(&x)))
+        }
+    }
+}
+
+impl Display for G1 {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+        self.format(f)
+    }
+}
+
+impl Debug for G1 {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+        self.format(f)
     }
 }
 
@@ -376,7 +544,7 @@ fn field_elem_from_larger_bytearray(random_bytes: &[u8]) -> BIG {
     let mut d = DBIG::new();
     for i in random_bytes {
         d.shl(8);
-        d.w[0] += *i as amcl_miracl::arch::Chunk;
+        d.w[0] += *i as Chunk;
     }
     // u = (e_0, ..., e_( m - 1 ) )
     d.dmod(&MODULUS)
@@ -422,7 +590,7 @@ mod tests {
             let actual_p = blshasher.hash_to_curve_xmd::<sha2::Sha256>(msgs[i].as_bytes());
             assert!(actual_p.is_ok());
             let actual_p = actual_p.unwrap();
-            assert_eq!(expected_p, actual_p);
+            assert_eq!(expected_p, actual_p.0);
         }
     }
 
@@ -455,11 +623,10 @@ mod tests {
                 &BIG::from_hex(p[i].0.to_string()),
                 &BIG::from_hex(p[i].1.to_string()),
             );
-            let actual_p =
-                blshasher.hash_to_curve_xof::<sha3::Shake128>(msgs[i].as_bytes());
+            let actual_p = blshasher.hash_to_curve_xof::<sha3::Shake128>(msgs[i].as_bytes());
             assert!(actual_p.is_ok());
             let actual_p = actual_p.unwrap();
-            assert_eq!(expected_p, actual_p);
+            assert_eq!(expected_p, actual_p.0);
         }
     }
 
@@ -495,7 +662,7 @@ mod tests {
             let actual_p = blshasher.encode_to_curve_xmd::<sha2::Sha256>(msgs[i].as_bytes());
             assert!(actual_p.is_ok());
             let actual_p = actual_p.unwrap();
-            assert_eq!(expected_p, actual_p);
+            assert_eq!(expected_p, actual_p.0);
         }
     }
 

@@ -4,16 +4,9 @@ categories = ["cryptography", "elliptic", "curves", "hash"]
 description = "A suite of hash to curve ECC algorithms"
 documentation = "https://docs.rs/hash2curve"
 edition = "2018"
-include = [
-    "src/**.rs",
-    "src/isogeny/**.rs",
-    "Cargo.toml",
-    "CHANGELOG",
-    "CODEOWNERS",
-    "CONTRIBUTING",
-    "LICENSE",
-    "README.md",
-    "RELEASES"
+exclude = [
+    "Cargo.lock",
+    "tests/**"
 ]
 license = "Apache-2.0"
 name = "hash2curve"
@@ -41,6 +34,11 @@ digest = "0.8.1"
 failure = "0.1.7"
 sha2 = "0.8.1"
 subtle = "2.2.2"
+subtle-encoding = "0.5.1"
 
 [dev-dependencies]
 sha3 = "0.8.2"
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
