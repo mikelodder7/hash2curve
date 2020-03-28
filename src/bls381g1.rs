@@ -113,25 +113,19 @@ impl HashToCurveXmd for Bls12381G1Sswu {
 impl HashToCurveXof for Bls12381G1Sswu {
     type Output = ECP;
 
-    fn encode_to_curve_xof<
-        X: ExtendableOutput + Input + Reset + Default,
-        D: Digest<OutputSize = U32>,
-    >(
+    fn encode_to_curve_xof<X: ExtendableOutput + Input + Reset + Default>(
         &self,
         data: &[u8],
     ) -> Result<Self::Output, HashingError> {
-        let u = hash_to_field_xof_nu::<X, D>(data, &self.dst)?;
+        let u = hash_to_field_xof_nu::<X>(data, &self.dst)?;
         Ok(encode_to_curve(u))
     }
 
-    fn hash_to_curve_xof<
-        X: ExtendableOutput + Input + Reset + Default,
-        D: Digest<OutputSize = U32>,
-    >(
+    fn hash_to_curve_xof<X: ExtendableOutput + Input + Reset + Default>(
         &self,
         data: &[u8],
     ) -> Result<Self::Output, HashingError> {
-        let (u0, u1) = hash_to_field_xof_ro::<X, D>(data, &self.dst)?;
+        let (u0, u1) = hash_to_field_xof_ro::<X>(data, &self.dst)?;
         Ok(hash_to_curve(u0, u1))
     }
 }
@@ -346,15 +340,12 @@ fn hash_to_field_xmd_ro<D: BlockInput + Digest<OutputSize = U32>>(
 
 /// Hash to field using expand_message_xof to compute `u` as specified in Section 5.2 in
 /// <https://datatracker.ietf.org/doc/draft-irtf-cfrg-hash-to-curve/?include_text=1>
-fn hash_to_field_xof_nu<
-    X: ExtendableOutput + Input + Reset + Default,
-    D: Digest<OutputSize = U32>,
->(
+fn hash_to_field_xof_nu<X: ExtendableOutput + Input + Reset + Default>(
     msg: &[u8],
     dst: &DomainSeparationTag,
 ) -> Result<BIG, HashingError> {
     // length_in_bytes = count * m * L = 1 * 1 * 64 = 64
-    let random_bytes = expand_message_xof::<X, D, L>(msg, dst)?;
+    let random_bytes = expand_message_xof::<X, L>(msg, dst)?;
     // elm_offset = L * (j + i * m) = 64 * (0 + 0 * 1) = 0
     // tv = substr(random_bytes, 0, 64)
     Ok(field_elem_from_larger_bytearray(random_bytes.as_slice()))
@@ -364,15 +355,12 @@ fn hash_to_field_xof_nu<
 /// <https://datatracker.ietf.org/doc/draft-irtf-cfrg-hash-to-curve/?include_text=1>
 ///
 /// We avoid the loop and get compile time checking this way
-fn hash_to_field_xof_ro<
-    X: ExtendableOutput + Input + Reset + Default,
-    D: Digest<OutputSize = U32>,
->(
+fn hash_to_field_xof_ro<X: ExtendableOutput + Input + Reset + Default>(
     msg: &[u8],
     dst: &DomainSeparationTag,
 ) -> Result<(BIG, BIG), HashingError> {
     // length_in_bytes = count * m * L = 2 * 1 * 64 = 128
-    let random_bytes = expand_message_xof::<X, D, TwoL>(msg, dst)?;
+    let random_bytes = expand_message_xof::<X, TwoL>(msg, dst)?;
     // elm_offset_0 = L * (j + i * m) = 64 * (0 + 0 * 1) = 0
     // elm_offset_1 = L * (j + i * m) = 64 * (0 + 1 * 1) = 64
     // tv_0 = substr(random_bytes, 0, 64)
@@ -468,7 +456,7 @@ mod tests {
                 &BIG::from_hex(p[i].1.to_string()),
             );
             let actual_p =
-                blshasher.hash_to_curve_xof::<sha3::Shake128, sha3::Sha3_256>(msgs[i].as_bytes());
+                blshasher.hash_to_curve_xof::<sha3::Shake128>(msgs[i].as_bytes());
             assert!(actual_p.is_ok());
             let actual_p = actual_p.unwrap();
             assert_eq!(expected_p, actual_p);

@@ -39,8 +39,8 @@ bls = ["miracl_amcl"]
 miracl_amcl = { version = "3.2.5", features = ["bls381"], optional = true }
 digest = "0.8.1"
 failure = "0.1.7"
+sha2 = "0.8.1"
 subtle = "2.2.2"
 
 [dev-dependencies]
-sha2 = "0.8.1"
 sha3 = "0.8.2"

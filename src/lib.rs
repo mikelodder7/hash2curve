@@ -103,14 +103,13 @@ impl DomainSeparationTag {
     /// imposed by an invoking protocol), this computes the
     /// H("H2C-OVERSIZE-DST-" || protocol_id || procotol_version || ciphersuite_id || encoding_id)
     /// `D` must be a cryptographically secure hash function like SHA256, SHA3-256, or BLAKE2.
-    pub fn to_bytes<D: Digest<OutputSize = U32>>(&self) -> Vec<u8> {
+    pub fn to_bytes(&self) -> Vec<u8> {
         let output = self.to_slice();
 
         if output.len() > MAX_DMS_SIZE {
-            let mut hasher = D::new();
-            hasher.input(b"H2C-OVERSIZE-DST-");
-            hasher.input(output.as_slice());
-            hasher.result().to_vec()
+            let mut data = b"H2C-OVERSIZE-DST-".to_vec();
+            data.extend_from_slice(output.as_slice());
+            sha2::Sha256::digest(data.as_slice()).to_vec()
         } else {
             output
         }
@@ -171,10 +170,7 @@ pub trait HashToCurveXof {
     /// Nonuniform encoding.  This function encodes byte
     /// strings to points in G.  The distribution of the output is not
     /// uniformly random in G.
-    fn encode_to_curve_xof<
-        X: ExtendableOutput + Input + Reset + Default,
-        D: Digest<OutputSize = U32>,
-    >(
+    fn encode_to_curve_xof<X: ExtendableOutput + Input + Reset + Default>(
         &self,
         data: &[u8],
     ) -> Result<Self::Output, HashingError>;
@@ -183,10 +179,7 @@ pub trait HashToCurveXof {
     /// byte strings to points in G.  This function is suitable for
     /// applications requiring a random oracle returning points in G,
     /// provided that map_to_curve is "well distributed".
-    fn hash_to_curve_xof<
-        X: ExtendableOutput + Input + Reset + Default,
-        D: Digest<OutputSize = U32>,
-    >(
+    fn hash_to_curve_xof<X: ExtendableOutput + Input + Reset + Default>(
         &self,
         data: &[u8],
     ) -> Result<Self::Output, HashingError>;
@@ -198,13 +191,12 @@ const MAX_EXPAND_MESSAGE_REQUEST: usize = 255;
 /// Implements the `expand_message_xof` as described in section 5.3.2 at
 /// <https://datatracker.ietf.org/doc/draft-irtf-cfrg-hash-to-curve/?include_text=1>
 /// computes hash function `D` from `msg` and the tag
-pub(crate) fn expand_message_xof<X, D, T>(
+pub(crate) fn expand_message_xof<X, T>(
     msg: &[u8],
     dst: &DomainSeparationTag,
 ) -> Result<GenericArray<u8, T>, HashingError>
 where
     X: ExtendableOutput + Input + Reset + Default,
-    D: Digest<OutputSize = U32>,
     T: ArrayLength<u8>,
 {
     if T::to_usize() == 0 {
@@ -214,7 +206,7 @@ where
         ));
     }
 
-    let mut dst_prime = dst.to_bytes::<D>();
+    let mut dst_prime = dst.to_bytes();
     dst_prime.insert(0, dst_prime.len() as u8); //I2OSP(len(DST), 1) || DST
     let mut hasher = X::default();
     hasher.input(msg.as_ref());
@@ -252,7 +244,7 @@ where
             ),
         ));
     }
-    let mut dst_prime = dst.to_bytes::<D>();
+    let mut dst_prime = dst.to_bytes();
     dst_prime.insert(0, dst_prime.len() as u8); //I2OSP(len(DST), 1) || DST
     let mut hasher = D::new();
     hasher.input(vec![0u8; D::BlockSize::to_usize()]); //z_pad = I2OSP(0, r_in_bytes)

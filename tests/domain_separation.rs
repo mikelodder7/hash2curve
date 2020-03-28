@@ -5,7 +5,7 @@ fn to_bytes() {
     let dms = DomainSeparationTag::new(b"bbs", None, None, None);
     assert!(dms.is_ok());
     let dms = dms.unwrap();
-    let res = dms.to_bytes::<sha2::Sha256>();
+    let res = dms.to_bytes();
     assert_eq!(res, b"bbs");
 
     assert!(DomainSeparationTag::new(b"", None, None, None).is_err());
@@ -14,9 +14,9 @@ fn to_bytes() {
     let dms = DomainSeparationTag::new(protocol_id.as_slice(), None, None, None);
     assert!(dms.is_ok());
     let dms = dms.unwrap();
-    assert_eq!(dms.to_bytes::<sha2::Sha256>().len(), 255);
+    assert_eq!(dms.to_bytes().len(), 255);
     let mut protocol_id = b"Lorem ipsum dolor sit amet, consectetur adipiscing elit. Cras nulla dolor, tincidunt vitae viverra non, vulputate vel quam. ".to_vec();
     protocol_id.extend_from_slice(b"Donec vel condimentum metus. Sed id tincidunt nisl, quis vehicula urna. Vestibulum a consectetur neque. Sed ultrices finibus nullam.");
     let dms = DomainSeparationTag::new(protocol_id.as_slice(), None, None, None).unwrap();
-    assert_eq!(dms.to_bytes::<sha2::Sha256>().len(), 32);
+    assert_eq!(dms.to_bytes().len(), 32);
 }
