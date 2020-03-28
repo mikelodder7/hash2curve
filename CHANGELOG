@@ -1,5 +1,7 @@
 # Version 0.0.2
 - API clean and simplification
+- Added G1 convenience wrapper
+- Moved some of the tests to be regression tests
 
 # Version 0.0.1
 - Initial Version

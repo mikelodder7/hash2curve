@@ -68,7 +68,7 @@ let point_on_g1 = hasher.hash_to_curve_xmd::<sha2::Sha256>(msg);
 let signature = point_on_g1.mul(&private_key);
 
 // Or extract the bytes or save as hexstring
-let point_on_g1 = hasher.hash_to_curve_xmd::<sha2::Sha256>(msg);
+let point_on_g1 = hasher.hash_to_curve_xmd::<sha2::Sha256>(msg).encode_to_hex();
 ```
     
 ## Tests
