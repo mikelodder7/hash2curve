@@ -139,7 +139,7 @@ impl HashToCurveXof for Bls12381G1Sswu {
 
 /// Represents a point on G1
 #[derive(Copy, Clone)]
-pub struct G1(ECP);
+pub struct G1(pub ECP);
 
 impl G1 {
     /// The bytes in G1 compressed form

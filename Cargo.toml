@@ -15,7 +15,7 @@ license = "Apache-2.0"
 name = "hash2curve"
 readme = "README.md"
 repository = "https://github.com/mikelodder7/hash2curve"
-version = "0.0.3"
+version = "0.0.4"
 
 [lib]
 name = "hash2curve"
