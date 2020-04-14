@@ -15,7 +15,7 @@ license = "Apache-2.0"
 name = "hash2curve"
 readme = "README.md"
 repository = "https://github.com/mikelodder7/hash2curve"
-version = "0.0.4"
+version = "0.0.5"
 
 [lib]
 name = "hash2curve"
@@ -29,10 +29,20 @@ lto = true
 
 [features]
 default = []
-bls = ["miracl_amcl"]
+bls = ["amcl-milagro/bls381"]
+nightly = []
+
+[[bench]]
+name = "bls381g1"
+harness = false
+
+[[bin]]
+name = "bls381g1"
+path = "bin/bls381g1.rs"
+required-features = ["amcl-milagro"]
 
 [dependencies]
-miracl_amcl = { version = "3.2.5", features = ["bls381"], optional = true }
+amcl-milagro = { version = "3.2.6", optional = true, package = "amcl", git = "https://github.com/mikelodder7/amcl.git" }
 digest = "0.8.1"
 failure = "0.1.7"
 sha2 = "0.8.1"
@@ -40,6 +50,8 @@ subtle = "2.2.2"
 subtle-encoding = "0.5.1"
 
 [dev-dependencies]
+criterion = "0.3.1"
+rand = "0.7.3"
 sha3 = "0.8.2"
 
 [package.metadata.docs.rs]

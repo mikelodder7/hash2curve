@@ -1,7 +1,7 @@
 //! See section C.2 in
 //! <https://datatracker.ietf.org/doc/draft-irtf-cfrg-hash-to-curve/?include_text=1>
 
-use amcl_miracl::bls381::big::BIG;
+use amcl_milagro::bls381::big::BIG;
 
 // A' = 144698a3b8e9433d693a02c96d4982b0ea985383ee66a8d8e8981aefd881ac98936f8da0e0f97f5cf428082d584c1d
 pub const ISO_A: BIG = BIG {

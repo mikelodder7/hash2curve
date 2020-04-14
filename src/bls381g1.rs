@@ -7,8 +7,8 @@ use crate::error::HashingError;
 use crate::isogeny::bls381g1::*;
 use crate::{expand_message_xmd, expand_message_xof, DomainSeparationTag};
 use crate::{HashToCurveXmd, HashToCurveXof};
-use amcl_miracl::arch::Chunk;
-use amcl_miracl::bls381::{big::BIG, dbig::DBIG, ecp::ECP, rom};
+use amcl_milagro::arch::Chunk;
+use amcl_milagro::bls381::{big::BIG, dbig::DBIG, ecp::ECP, rom};
 use digest::generic_array::GenericArray;
 use digest::{
     generic_array::typenum::{marker_traits::Unsigned, U128, U32, U48, U64, U96},
@@ -27,7 +27,7 @@ use std::{
 type L = U64;
 type TwoL = U128;
 const MODULUS: BIG = BIG {
-    w: amcl_miracl::bls381::rom::MODULUS,
+    w: amcl_milagro::bls381::rom::MODULUS,
 };
 const PM1DIV2: BIG = BIG {
     w: [
@@ -156,6 +156,8 @@ impl G1 {
     ///
     /// NOTE: Must use `GenericArray` due to rust error
     /// error[E0277]: arrays only have std trait implementations for lengths 0..=32
+    /// The caller can use section 4.3 in https://tools.ietf.org/id/draft-jivsov-ecc-compact-05.html
+    /// to reconstruct Y if needed
     pub fn to_bytes(&self) -> GenericArray<u8, U48> {
         let mut bytes = [0u8; Self::ECP_COMPRESSED];
         let mut temp = ECP::new();
@@ -583,7 +585,7 @@ fn field_elem_from_larger_bytearray(random_bytes: &[u8]) -> BIG {
 mod tests {
     use crate::bls381g1::{hash_to_field_xmd_nu, hash_to_field_xmd_ro, map_to_curve};
     use crate::DomainSeparationTag;
-    use amcl_miracl::bls381::{big::BIG, ecp::ECP};
+    use amcl_milagro::bls381::{big::BIG, ecp::ECP};
 
     #[test]
     fn map_to_curve_ro_tests() {
