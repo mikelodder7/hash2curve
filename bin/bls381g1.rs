@@ -20,8 +20,8 @@ fn main() {
 
         let (counts, elapsed ) = hash_loop(data.as_mut_slice(), &hasher, timeout_secs);
 
-        println!("{} in {}.{:0<2}s",
-                 counts, elapsed / 1000, (elapsed % 1000) / 10);
+        println!("{} in {}.{:0<2}s. {:0.3} ms/iter",
+                 counts, elapsed / 1000, (elapsed % 1000) / 10, ((elapsed as f64 / 1000f64) / counts as f64) * 1000.00);
 
     }
 }
