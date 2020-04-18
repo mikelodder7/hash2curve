@@ -210,7 +210,7 @@ where
     let mut dst_prime = dst.to_bytes();
     dst_prime.insert(0, dst_prime.len() as u8); //I2OSP(len(DST), 1) || DST
     let mut hasher = X::default();
-    hasher.input(msg.as_ref());
+    hasher.input(msg);
     hasher.input(T::to_u16().to_be_bytes()); //I2OSP(len_in_bytes, 2)
     hasher.input(dst_prime.as_slice());
     let mut result = vec![0u8; T::to_usize()];
@@ -286,12 +286,13 @@ fn vxor(b1: &[u8], b2: &[u8]) -> Vec<u8> {
 
 /// Convenience export module
 pub mod prelude {
-    pub use super::{HashToCurveXmd, HashToCurveXof, DomainSeparationTag};
-    pub use super::error::{HashingError, HashingErrorKind};
     #[cfg(feature = "bls")]
     pub use super::bls381g1::{Bls12381G1Sswu, G1};
+    pub use super::error::{HashingError, HashingErrorKind};
+    pub use super::{DomainSeparationTag, HashToCurveXmd, HashToCurveXof};
 }
 
+mod constants;
 mod isogeny;
 
 /// Hashing for BLS12-381 to G1

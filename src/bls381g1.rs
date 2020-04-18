@@ -3,6 +3,7 @@
 //! and Section 5 of
 //!  <https://eprint.iacr.org/2019/403.pdf>
 
+use crate::constants::bls381g1::*;
 use crate::error::HashingError;
 use crate::isogeny::bls381g1::*;
 use crate::{expand_message_xmd, expand_message_xof, DomainSeparationTag};
@@ -26,56 +27,6 @@ use std::{
 /// L = 64
 type L = U64;
 type TwoL = U128;
-const MODULUS: BIG = BIG {
-    w: amcl_milagro::bls381::rom::MODULUS,
-};
-const PM1DIV2: BIG = BIG {
-    w: [
-        71_916_856_549_561_685,
-        108_086_211_381_297_143,
-        186_063_435_852_751_093,
-        218_960_087_668_936_289,
-        225_643_796_693_662_629,
-        229_680_090_418_738_422,
-        3_490_221_905,
-    ],
-};
-const H_EFF: BIG = BIG {
-    w: [144_396_663_052_632_065, 52, 0, 0, 0, 0, 0],
-};
-const C1: BIG = BIG {
-    w: [
-        132_416_828_320_029_820,
-        -36_241_730_206_030_966,
-        -183_175_740_354_038_500,
-        -108_808_289_511_770_161,
-        19_716_962_043_635_886,
-        150_180_602_526_288_156,
-        2_033_276_157,
-    ],
-};
-const C2: BIG = BIG {
-    w: [
-        170_292_360_909_944_894,
-        176_868_607_242_987_704,
-        7_626_954_141_253_676,
-        39_810_925_030_715_689,
-        14_823_383_385_055_774,
-        15_557_254_971_433_191,
-        634_585_801,
-    ],
-};
-const SQRT_C1: BIG = BIG {
-    w: [
-        180_073_616_350_636_715,
-        198_158_293_766_504_443,
-        237_146_906_002_231_418,
-        253_595_231_910_324_016,
-        112_821_898_346_831_314,
-        258_955_233_285_225_083,
-        1_745_110_952,
-    ],
-};
 
 /// BLS12381G1_XMD:SHA-256_SSWU provides both
 /// Random Oracle (RO)
@@ -201,11 +152,19 @@ impl G1 {
     pub fn from_byte_points<B: AsRef<[u8]>>(x: B, y: B) -> Result<G1, String> {
         let a = x.as_ref();
         if a.len() != rom::MODBYTES {
-            return Err(format!("Invalid number of bytes for x. Expected '{}', supplied '{}'", rom::MODBYTES, a.len()));
+            return Err(format!(
+                "Invalid number of bytes for x. Expected '{}', supplied '{}'",
+                rom::MODBYTES,
+                a.len()
+            ));
         }
         let b = y.as_ref();
         if b.len() != rom::MODBYTES {
-            return Err(format!("Invalid number of bytes for y. Expected '{}', supplied '{}'", rom::MODBYTES, b.len()));
+            return Err(format!(
+                "Invalid number of bytes for y. Expected '{}', supplied '{}'",
+                rom::MODBYTES,
+                b.len()
+            ));
         }
 
         let x = BIG::frombytes(&a);

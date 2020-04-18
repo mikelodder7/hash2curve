@@ -1,15 +1,35 @@
 #[cfg(feature = "bls")]
 mod tests {
-    use hash2curve::{DomainSeparationTag, HashToCurveXof, HashToCurveXmd, bls381g1::{Bls12381G1Sswu, G1}};
     use digest::generic_array::GenericArray;
+    use hash2curve::{
+        bls381g1::{Bls12381G1Sswu, G1},
+        DomainSeparationTag, HashToCurveXmd, HashToCurveXof,
+    };
     use std::str::FromStr;
 
     #[test]
     fn g1_byte_tests() {
-        let bytes = GenericArray::clone_from_slice(vec![20, 115, 141, 175, 112, 245, 20, 45, 240, 56, 201, 227, 190, 118, 245, 215, 27, 13, 182, 97, 62, 94, 245, 92, 254, 142, 67, 226, 127, 132, 13, 199, 93, 233, 112, 146, 218, 97, 115, 118, 169, 245, 152, 231, 160, 146, 12, 71].as_slice());
+        let bytes = GenericArray::clone_from_slice(
+            vec![
+                20, 115, 141, 175, 112, 245, 20, 45, 240, 56, 201, 227, 190, 118, 245, 215, 27, 13,
+                182, 97, 62, 94, 245, 92, 254, 142, 67, 226, 127, 132, 13, 199, 93, 233, 112, 146,
+                218, 97, 115, 118, 169, 245, 152, 231, 160, 146, 12, 71,
+            ]
+            .as_slice(),
+        );
         let g1 = G1::from(bytes);
         assert_eq!(g1.to_bytes(), bytes);
-        let bytes = GenericArray::clone_from_slice(vec![20, 115, 141, 175, 112, 245, 20, 45, 240, 56, 201, 227, 190, 118, 245, 215, 27, 13, 182, 97, 62, 94, 245, 92, 254, 142, 67, 226, 127, 132, 13, 199, 93, 233, 112, 146, 218, 97, 115, 118, 169, 245, 152, 231, 160, 146, 12, 71, 18, 100, 91, 124, 176, 113, 148, 54, 49, 208, 98, 178, 44, 166, 26, 138, 61, 242, 168, 189, 172, 78, 111, 205, 44, 24, 100, 62, 243, 122, 152, 190, 172, 247, 112, 206, 40, 203, 1, 200, 171, 245, 237, 99, 209, 161, 155, 83].as_slice());
+        let bytes = GenericArray::clone_from_slice(
+            vec![
+                20, 115, 141, 175, 112, 245, 20, 45, 240, 56, 201, 227, 190, 118, 245, 215, 27, 13,
+                182, 97, 62, 94, 245, 92, 254, 142, 67, 226, 127, 132, 13, 199, 93, 233, 112, 146,
+                218, 97, 115, 118, 169, 245, 152, 231, 160, 146, 12, 71, 18, 100, 91, 124, 176,
+                113, 148, 54, 49, 208, 98, 178, 44, 166, 26, 138, 61, 242, 168, 189, 172, 78, 111,
+                205, 44, 24, 100, 62, 243, 122, 152, 190, 172, 247, 112, 206, 40, 203, 1, 200, 171,
+                245, 237, 99, 209, 161, 155, 83,
+            ]
+            .as_slice(),
+        );
         let g1 = G1::from(bytes);
         assert_eq!(g1.to_bytes_uncompressed(), bytes);
     }
@@ -41,7 +61,7 @@ mod tests {
             None,
             None,
         )
-            .unwrap();
+        .unwrap();
         let msgs = [
             "",
             "abc",
@@ -74,7 +94,7 @@ mod tests {
             None,
             None,
         )
-            .unwrap();
+        .unwrap();
         let msgs = [
             "",
             "abc",
@@ -107,7 +127,7 @@ mod tests {
             None,
             None,
         )
-            .unwrap();
+        .unwrap();
         let msgs = [
             "",
             "abc",
