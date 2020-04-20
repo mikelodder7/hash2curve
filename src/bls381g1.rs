@@ -319,71 +319,103 @@ fn map_to_curve(u: BIG) -> ECP {
 /// Only works if p is congruent to 3 mod 4
 fn map_to_curve_simple_swu(u: BIG) -> (BIG, BIG) {
     // tv1 = Z * u^2
-    let tv1 = BIG::modmul(&Z, &BIG::modsqr(&u, &MODULUS), &MODULUS);
+    let mut tv1 = BIG::modmul(&Z, &BIG::modsqr(&u, &MODULUS), &MODULUS);
+    println!("line 323: tv1 = {}", tv1.to_hex());
     // tv2 = tv1^2
     let mut tv2 = BIG::modsqr(&tv1, &MODULUS);
+    println!("line 326: tv2 = {}", tv2.to_hex());
 
     // x1 = tv1 + tv2
     let mut x1 = BIG::new_big(&tv1);
     x1.add(&tv2);
     x1.rmod(&MODULUS);
+    println!("line 332:  x1 = {}", x1.to_hex());
 
     // x1 = inv0(x1)
     x1.invmodp(&MODULUS);
+    println!("line 336:  x1 = {}", x1.to_hex());
 
     let e1 = if x1.iszilch() { 1 } else { 0 };
 
+    println!("line 340:  e1 = {}", e1);
+
     // x1 = x1 + 1
     x1.inc(1);
+    println!("line 344:  x1 = {}", x1.to_hex());
 
     // x1 = CMOV(x1, c2, e1)
     x1.cmove(&C2, e1);
+    println!("line 348:  x1 = {}", x1.to_hex());
 
     // x1 = x1 * c1
+    println!("a =    BIG {{ w: [{}] }}", x1.w.into_iter().map(|i| i.to_string()).collect::<Vec<String>>().join(","));
+    println!("b =    BIG {{ w: [{}] }}", C1.w.into_iter().map(|i| i.to_string()).collect::<Vec<String>>().join(","));
+    println!("MODULUS =    BIG {{ w: [{}] }}", MODULUS.w.into_iter().map(|i| i.to_string()).collect::<Vec<String>>().join(","));
     x1 = BIG::modmul(&x1, &C1, &MODULUS);
+    println!("line 352:  x1 = {}", x1.to_hex());
+    println!("x =    BIG {{ w: [{}] }}", x1.w.into_iter().map(|i| i.to_string()).collect::<Vec<String>>().join(","));
 
     // gx1 = x1^2
     let mut gx1 = BIG::modsqr(&x1, &MODULUS);
     // gx1 = gx1 + A
     gx1.add(&ISO_A);
     gx1.rmod(&MODULUS);
+    println!("line 359: gx1 = {}", gx1.to_hex());
 
     // gx1 = gx1 * x1
     gx1 = BIG::modmul(&gx1, &x1, &MODULUS);
+    println!("line 363: gx1 = {}", gx1.to_hex());
 
     // gx1 = gx1 + B
     gx1.add(&ISO_B);
     gx1.rmod(&MODULUS);
+    println!("line 368: gx1 = {}", gx1.to_hex());
 
     // x2 = tv1 * x1
-    let x2 = BIG::modmul(&tv1, &x1, &MODULUS);
+    let mut x2 = BIG::modmul(&tv1, &x1, &MODULUS);
+    println!("line 372:  x2 = {}", x2.to_hex());
 
     // tv2 = tv1 * tv2
     tv2 = BIG::modmul(&tv1, &tv2, &MODULUS);
+    println!("line 376: tv2 = {}", tv2.to_hex());
 
     // gx2 = gx1 * tv2
-    let gx2 = BIG::modmul(&gx1, &tv2, &MODULUS);
+    let mut gx2 = BIG::modmul(&gx1, &tv2, &MODULUS);
+    println!("line 380: gx2 = {}", gx2.to_hex());
 
     // e2 = is_square(gx1)
     let e2 = if is_square(&gx1) { 1 } else { 0 };
+    println!("line 384:  e2 = {}", e2);
 
     // x = CMOV(x2, x1, e2)
     let mut x = BIG::new_copy(&x2);
     x.cmove(&x1, e2);
+    println!("line 389:   x = {}", x.to_hex());
 
     // y2 = CMOV(gx2, gx1, e2)
     let mut y2 = BIG::new_copy(&gx2);
     y2.cmove(&gx1, e2);
+    println!("line 394:  y2 = {}", y2.to_hex());
 
     // y = sqrt(y2)
-    let y = sqrt_3mod4(&y2);
+    let mut y = sqrt_3mod4(&y2);
+    println!("line 398:   y = {}", y.to_hex());
 
     // e3 = sgn0(u) == sgn0(y)
     let e3 = if sgn0(&u) == sgn0(&y) { 1 } else { 0 };
+    println!("line 402:  e3 = {}", e3);
 
     // y = CMOV(-y, y, e3)
     let mut y_neg = BIG::modneg(&y, &MODULUS);
+    println!("line 406:y_neg= {}", y_neg.to_hex());
     y_neg.cmove(&y, e3);
+    println!("line 408:y_neg= {}", y_neg.to_hex());
+    let mut c1 = C1;
+    let mut c2 = C2;
+    let mut modulus = MODULUS;
+    println!("           C1 = {}", c1.to_hex());
+    println!("           C2 = {}", c2.to_hex());
+    println!("      MODULUS = {}", modulus.to_hex());
 
     (x, y_neg)
 }
@@ -398,6 +430,8 @@ fn sqrt_3mod4(x: &BIG) -> BIG {
 /// is_square(x) := { True,  if x^((q - 1) / 2) is 0 or 1 in F;
 ///                 { False, otherwise.
 fn is_square(x: &BIG) -> bool {
+    let mut pm1div2 = PM1DIV2;
+    println!("line 424:pdiv2= {}", pm1div2.to_hex());
     let mut t = BIG::new_copy(x);
     t = t.powmod(&PM1DIV2, &MODULUS);
     let mut sum = 0;
@@ -557,9 +591,9 @@ mod tests {
         .unwrap();
         let msgs = [
             "",
-            "abc",
-            "abcdef0123456789",
-            "a512_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            // "abc",
+            // "abcdef0123456789",
+            // "a512_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
         ];
 
         let expected_q = [
@@ -613,15 +647,15 @@ mod tests {
         .unwrap();
         let msgs = [
             "",
-            "abc",
-            "abcdef0123456789",
-            "a512_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            // "abc",
+            // "abcdef0123456789",
+            // "a512_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
         ];
         let q_s = [
             ("0dddf77f320e7848a457358ab8d3b84cbaf19307be26b91a10c211651691cd736b1f59d77aed3954f857f108d6966f5b", "0450ab32020649f22a2fca166a1d8a59d4c93f1eb078a4bedd6c48027b9933507a2a8ae4d915305f58ede781283325a9"),
-            ("12897a9a513b12303a7f0f3a3cc7c838d16847a31507980945312bede915848159bd390b16b8e378b398e31a385d9180", "1372530cc0811d70071e50640281aa8aaf96ee09c01281ccfead92296cb9dacf5054aa51dbea730e46239e709042a15d"),
-            ("08459bd42a955d6e247fce6c81eda0ad9645f9e666d141a71f0afa3fbc509b2c58550fe077d073cc752493400399fddd", "169d35a8c6bb915ae910f4c6cde359622746b0c8b2b241b411d0e92ef991d3e6a7b0fafabb93c1de2e3997d6e362ce8a"),
-            ("08c937d529c01ab2398b85b0bff6da465ed6265d4944dbbef7d383eea40157927082739c7b5417027d2225c6cb9d5ef0", "059047d83b5ea1ff7f0665b406acede27f233d3414055cbff25b37614b679f08fd6d807b5956edec6abad36c5321d99e"),
+            // ("12897a9a513b12303a7f0f3a3cc7c838d16847a31507980945312bede915848159bd390b16b8e378b398e31a385d9180", "1372530cc0811d70071e50640281aa8aaf96ee09c01281ccfead92296cb9dacf5054aa51dbea730e46239e709042a15d"),
+            // ("08459bd42a955d6e247fce6c81eda0ad9645f9e666d141a71f0afa3fbc509b2c58550fe077d073cc752493400399fddd", "169d35a8c6bb915ae910f4c6cde359622746b0c8b2b241b411d0e92ef991d3e6a7b0fafabb93c1de2e3997d6e362ce8a"),
+            // ("08c937d529c01ab2398b85b0bff6da465ed6265d4944dbbef7d383eea40157927082739c7b5417027d2225c6cb9d5ef0", "059047d83b5ea1ff7f0665b406acede27f233d3414055cbff25b37614b679f08fd6d807b5956edec6abad36c5321d99e"),
         ];
 
         for i in 0..msgs.len() {
