@@ -19,6 +19,10 @@ unused_qualifications,
 //! These methods do not cover serialization or deserialization according to
 //! <http://www.secg.org/sec1-v2.pdf>
 
+#[cfg(feature = "bls")]
+#[macro_use]
+extern crate arrayref;
+
 use crate::error::{HashingError, HashingErrorKind};
 use digest::{
     generic_array::{

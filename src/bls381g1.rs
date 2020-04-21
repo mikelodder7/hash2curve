@@ -21,6 +21,7 @@ use std::{
     fmt::{Display, Formatter, Result as FmtResult},
     str::FromStr,
 };
+use subtle::ConstantTimeEq;
 
 /// To compute a `L` use the following formula
 /// L = ceil(ceil(log2(p) + k) / 8). For example, in our case log2(p) = 381, k = 128
@@ -109,36 +110,44 @@ impl G1 {
     /// error[E0277]: arrays only have std trait implementations for lengths 0..=32
     /// The caller can use section 4.3 in https://tools.ietf.org/id/draft-jivsov-ecc-compact-05.html
     /// to reconstruct Y if needed
-    pub fn to_bytes(&self) -> GenericArray<u8, U48> {
+    pub fn to_bytes(&self) -> [u8; Self::COMPRESSED_BYTES] {
         let mut bytes = [0u8; Self::ECP_COMPRESSED];
         let mut temp = ECP::new();
         temp.copy(&self.0);
         temp.tobytes(bytes.as_mut(), true);
-        GenericArray::clone_from_slice(&bytes[1..])
+        // GenericArray::clone_from_slice(&bytes[1..])
+        let mut output = [0u8; Self::COMPRESSED_BYTES];
+        output.copy_from_slice(&bytes[1..]);
+        // Store the value of y as the MSB
+        output[0] |= (bytes[0] & 1) << 7;
+        output
     }
 
     /// Serialize the point to uncompressed bytes in big endian form
     /// The x-coordinate followed by the y-coordinate
     /// NOTE: Must use `GenericArray` due to rust error
     /// error[E0277]: arrays only have std trait implementations for lengths 0..=32
-    pub fn to_bytes_uncompressed(&self) -> GenericArray<u8, U96> {
+    pub fn to_bytes_uncompressed(&self) -> [u8; Self::UNCOMPRESSED_BYTES] {
         let mut bytes = [0u8; Self::ECP_UNCOMPRESSED];
         let mut temp = ECP::new();
         temp.copy(&self.0);
         temp.tobytes(bytes.as_mut(), false);
-        GenericArray::clone_from_slice(&bytes[1..])
+        // GenericArray::clone_from_slice(&bytes[1..])
+        let mut output = [0u8; Self::UNCOMPRESSED_BYTES];
+        output.copy_from_slice(&bytes[1..]);
+        output
     }
 
     /// Serialize the point to compressed lower hex string
     /// Only the x-coordinate
     pub fn encode_to_hex(&self) -> String {
-        String::from_utf8(subtle_encoding::hex::encode(self.to_bytes())).unwrap()
+        String::from_utf8(subtle_encoding::hex::encode(&self.to_bytes()[..])).unwrap()
     }
 
     /// Serialize the point to uncompressed lower hex string
     /// The x-coordinate followed by the y-coordinate
     pub fn encode_to_hex_uncompressed(&self) -> String {
-        String::from_utf8(subtle_encoding::hex::encode(self.to_bytes_uncompressed())).unwrap()
+        String::from_utf8(subtle_encoding::hex::encode(&self.to_bytes_uncompressed()[..])).unwrap()
     }
 
     /// Convenience method when x and y are supplied separately
@@ -151,18 +160,18 @@ impl G1 {
     /// Convenience method when x and y are supplied separately
     pub fn from_byte_points<B: AsRef<[u8]>>(x: B, y: B) -> Result<G1, String> {
         let a = x.as_ref();
-        if a.len() != rom::MODBYTES {
+        if a.len() != Self::COMPRESSED_BYTES {
             return Err(format!(
                 "Invalid number of bytes for x. Expected '{}', supplied '{}'",
-                rom::MODBYTES,
+                Self::COMPRESSED_BYTES,
                 a.len()
             ));
         }
         let b = y.as_ref();
-        if b.len() != rom::MODBYTES {
+        if b.len() != Self::COMPRESSED_BYTES {
             return Err(format!(
                 "Invalid number of bytes for y. Expected '{}', supplied '{}'",
-                rom::MODBYTES,
+                Self::COMPRESSED_BYTES,
                 b.len()
             ));
         }
@@ -192,26 +201,89 @@ impl PartialEq for G1 {
     }
 }
 
+impl PartialEq<[u8; G1::COMPRESSED_BYTES]> for G1 {
+    fn eq(&self, other: &[u8; G1::COMPRESSED_BYTES]) -> bool {
+        self.to_bytes().ct_eq(other).unwrap_u8() == 1
+    }
+}
+
+impl PartialEq<[u8; G1::UNCOMPRESSED_BYTES]> for G1 {
+    fn eq(&self, other: &[u8; G1::UNCOMPRESSED_BYTES]) -> bool {
+        self.to_bytes_uncompressed().ct_eq(other).unwrap_u8() == 1
+    }
+}
+
+impl PartialEq<GenericArray<u8, U48>> for G1 {
+    fn eq(&self, other: &GenericArray<u8, U48>) -> bool {
+        self.eq(array_ref![other, 0, G1::COMPRESSED_BYTES])
+    }
+}
+
+impl PartialEq<Vec<u8>> for G1 {
+    fn eq(&self, other: &Vec<u8>) -> bool {
+        self.eq(other.as_slice())
+    }
+}
+
+impl PartialEq<[u8]> for G1 {
+    fn eq(&self, other: &[u8]) -> bool {
+        match other.len() {
+            G1::COMPRESSED_BYTES => self.eq(array_ref![other, 0, G1::COMPRESSED_BYTES]),
+            G1::UNCOMPRESSED_BYTES => self.eq(array_ref![other, 0, G1::UNCOMPRESSED_BYTES]),
+            _ => false
+        }
+    }
+}
+
 impl From<ECP> for G1 {
     fn from(p: ECP) -> Self {
         Self(p)
     }
 }
 
+impl From<[u8; G1::COMPRESSED_BYTES]> for G1 {
+    fn from(x: [u8; G1::COMPRESSED_BYTES]) -> Self {
+        Self::from(&x)
+    }
+}
+
+impl From<&[u8; G1::COMPRESSED_BYTES]> for G1 {
+    fn from(x: &[u8; G1::COMPRESSED_BYTES]) -> Self {
+        let parity = ((x[0] >> 7) & 1) as isize;
+        let mut temp = x.clone();
+        temp[0] = x[0] & 0x7F;
+        let x = BIG::frombytes(&temp[..]);
+        Self(ECP::new_bigint(&x, parity))
+    }
+}
+
+impl From<[u8; G1::UNCOMPRESSED_BYTES]> for G1 {
+    fn from(points: [u8; G1::UNCOMPRESSED_BYTES]) -> Self {
+        Self::from(&points)
+    }
+}
+
+impl From<&[u8; G1::UNCOMPRESSED_BYTES]> for G1 {
+    fn from(points: &[u8; G1::UNCOMPRESSED_BYTES]) -> Self {
+        let x = BIG::frombytes(&points[..Self::COMPRESSED_BYTES]);
+        let y = BIG::frombytes(&points[Self::COMPRESSED_BYTES..]);
+        Self(ECP::new_bigs(&x, &y))
+    }
+}
+
 /// Deserialize the point from a compressed x-coordinate in big endian form
 impl From<GenericArray<u8, U48>> for G1 {
     fn from(bytes: GenericArray<u8, U48>) -> Self {
-        let x = BIG::frombytes(&bytes[..]);
-        Self(ECP::new_big(&x))
+        let t: &[u8; Self::COMPRESSED_BYTES] = array_ref![bytes, 0, G1::COMPRESSED_BYTES];
+        Self::from(t)
     }
 }
 
 /// Deserialize the point from x and y coordinates in big endian form
 impl From<GenericArray<u8, U96>> for G1 {
     fn from(bytes: GenericArray<u8, U96>) -> Self {
-        let x = BIG::frombytes(&bytes[..rom::MODBYTES]);
-        let y = BIG::frombytes(&bytes[rom::MODBYTES..]);
-        Self(ECP::new_bigs(&x, &y))
+        let t: &[u8; Self::UNCOMPRESSED_BYTES] = array_ref![bytes, 0, G1::UNCOMPRESSED_BYTES];
+        Self::from(t)
     }
 }
 
@@ -249,29 +321,21 @@ impl FromStr for G1 {
             }
         }
 
-        let bytes = match subtle_encoding::hex::decode(val) {
+        let mut bytes = match subtle_encoding::hex::decode(val) {
             Ok(b) => b,
             Err(e) => return Err(format!("{}", e)),
         };
 
-        let mut x = BIG::new();
-        x.w[0] += bytes[0] as Chunk;
-        for i in 1..Self::COMPRESSED_BYTES {
-            x.fshl(8);
-            x.w[0] += bytes[i] as Chunk;
-        }
-
         if bytes.len() > Self::COMPRESSED_BYTES {
-            let mut y = BIG::new();
-            y.w[0] = bytes[Self::COMPRESSED_BYTES] as Chunk;
+            let x = BIG::frombytes(&bytes[..Self::COMPRESSED_BYTES]);
+            let y = BIG::frombytes(&bytes[Self::COMPRESSED_BYTES..]);
 
-            for i in (Self::COMPRESSED_BYTES + 1)..Self::UNCOMPRESSED_BYTES {
-                y.fshl(8);
-                y.w[0] += bytes[i] as Chunk;
-            }
             Ok(Self(ECP::new_bigs(&x, &y)))
         } else {
-            Ok(Self(ECP::new_big(&x)))
+            let parity = ((bytes[0] >> 7) & 1) as isize;
+            bytes[0] = bytes[0] & 0x7F;
+            let x = BIG::frombytes(bytes.as_slice());
+            Ok(Self(ECP::new_bigint(&x, parity)))
         }
     }
 }
@@ -318,105 +382,85 @@ fn map_to_curve(u: BIG) -> ECP {
 ///
 /// Only works if p is congruent to 3 mod 4
 fn map_to_curve_simple_swu(u: BIG) -> (BIG, BIG) {
+    // let u = BIG::fromstring("0CCB6BDA9B602AB82AAE21C0291623E2F639648A6ADA1C76D8FFB664130FD18D98A2CC6160624148827A9726678E7CD4".to_string());
     // tv1 = Z * u^2
     let mut tv1 = BIG::modmul(&Z, &BIG::modsqr(&u, &MODULUS), &MODULUS);
-    println!("line 323: tv1 = {}", tv1.to_hex());
+    tv1.norm();
     // tv2 = tv1^2
     let mut tv2 = BIG::modsqr(&tv1, &MODULUS);
-    println!("line 326: tv2 = {}", tv2.to_hex());
+    tv2.norm();
 
     // x1 = tv1 + tv2
     let mut x1 = BIG::new_big(&tv1);
     x1.add(&tv2);
     x1.rmod(&MODULUS);
-    println!("line 332:  x1 = {}", x1.to_hex());
+    x1.norm();
 
     // x1 = inv0(x1)
     x1.invmodp(&MODULUS);
-    println!("line 336:  x1 = {}", x1.to_hex());
+    x1.norm();
 
     let e1 = if x1.iszilch() { 1 } else { 0 };
 
-    println!("line 340:  e1 = {}", e1);
-
     // x1 = x1 + 1
     x1.inc(1);
-    println!("line 344:  x1 = {}", x1.to_hex());
 
     // x1 = CMOV(x1, c2, e1)
     x1.cmove(&C2, e1);
-    println!("line 348:  x1 = {}", x1.to_hex());
 
     // x1 = x1 * c1
-    println!("a =    BIG {{ w: [{}] }}", x1.w.into_iter().map(|i| i.to_string()).collect::<Vec<String>>().join(","));
-    println!("b =    BIG {{ w: [{}] }}", C1.w.into_iter().map(|i| i.to_string()).collect::<Vec<String>>().join(","));
-    println!("MODULUS =    BIG {{ w: [{}] }}", MODULUS.w.into_iter().map(|i| i.to_string()).collect::<Vec<String>>().join(","));
     x1 = BIG::modmul(&x1, &C1, &MODULUS);
-    println!("line 352:  x1 = {}", x1.to_hex());
-    println!("x =    BIG {{ w: [{}] }}", x1.w.into_iter().map(|i| i.to_string()).collect::<Vec<String>>().join(","));
+    x1.norm();
 
     // gx1 = x1^2
     let mut gx1 = BIG::modsqr(&x1, &MODULUS);
     // gx1 = gx1 + A
     gx1.add(&ISO_A);
     gx1.rmod(&MODULUS);
-    println!("line 359: gx1 = {}", gx1.to_hex());
+    gx1.norm();
 
     // gx1 = gx1 * x1
     gx1 = BIG::modmul(&gx1, &x1, &MODULUS);
-    println!("line 363: gx1 = {}", gx1.to_hex());
 
     // gx1 = gx1 + B
     gx1.add(&ISO_B);
     gx1.rmod(&MODULUS);
-    println!("line 368: gx1 = {}", gx1.to_hex());
 
     // x2 = tv1 * x1
     let mut x2 = BIG::modmul(&tv1, &x1, &MODULUS);
-    println!("line 372:  x2 = {}", x2.to_hex());
+    x2.norm();
 
     // tv2 = tv1 * tv2
     tv2 = BIG::modmul(&tv1, &tv2, &MODULUS);
-    println!("line 376: tv2 = {}", tv2.to_hex());
 
     // gx2 = gx1 * tv2
     let mut gx2 = BIG::modmul(&gx1, &tv2, &MODULUS);
-    println!("line 380: gx2 = {}", gx2.to_hex());
+    gx2.norm();
 
     // e2 = is_square(gx1)
     let e2 = if is_square(&gx1) { 1 } else { 0 };
-    println!("line 384:  e2 = {}", e2);
 
     // x = CMOV(x2, x1, e2)
     let mut x = BIG::new_copy(&x2);
     x.cmove(&x1, e2);
-    println!("line 389:   x = {}", x.to_hex());
 
     // y2 = CMOV(gx2, gx1, e2)
     let mut y2 = BIG::new_copy(&gx2);
     y2.cmove(&gx1, e2);
-    println!("line 394:  y2 = {}", y2.to_hex());
 
     // y = sqrt(y2)
-    let mut y = sqrt_3mod4(&y2);
-    println!("line 398:   y = {}", y.to_hex());
+    let y = sqrt_3mod4(&y2);
 
     // e3 = sgn0(u) == sgn0(y)
     let e3 = if sgn0(&u) == sgn0(&y) { 1 } else { 0 };
-    println!("line 402:  e3 = {}", e3);
 
     // y = CMOV(-y, y, e3)
     let mut y_neg = BIG::modneg(&y, &MODULUS);
-    println!("line 406:y_neg= {}", y_neg.to_hex());
+    y_neg.norm();
     y_neg.cmove(&y, e3);
-    println!("line 408:y_neg= {}", y_neg.to_hex());
-    let mut c1 = C1;
-    let mut c2 = C2;
-    let mut modulus = MODULUS;
-    println!("           C1 = {}", c1.to_hex());
-    println!("           C2 = {}", c2.to_hex());
-    println!("      MODULUS = {}", modulus.to_hex());
 
+    println!("x = {}", x.to_hex());
+    println!("y = {}", y_neg.to_hex());
     (x, y_neg)
 }
 
@@ -430,8 +474,6 @@ fn sqrt_3mod4(x: &BIG) -> BIG {
 /// is_square(x) := { True,  if x^((q - 1) / 2) is 0 or 1 in F;
 ///                 { False, otherwise.
 fn is_square(x: &BIG) -> bool {
-    let mut pm1div2 = PM1DIV2;
-    println!("line 424:pdiv2= {}", pm1div2.to_hex());
     let mut t = BIG::new_copy(x);
     t = t.powmod(&PM1DIV2, &MODULUS);
     let mut sum = 0;
@@ -647,15 +689,15 @@ mod tests {
         .unwrap();
         let msgs = [
             "",
-            // "abc",
-            // "abcdef0123456789",
-            // "a512_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            "abc",
+            "abcdef0123456789",
+            "a512_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
         ];
         let q_s = [
             ("0dddf77f320e7848a457358ab8d3b84cbaf19307be26b91a10c211651691cd736b1f59d77aed3954f857f108d6966f5b", "0450ab32020649f22a2fca166a1d8a59d4c93f1eb078a4bedd6c48027b9933507a2a8ae4d915305f58ede781283325a9"),
-            // ("12897a9a513b12303a7f0f3a3cc7c838d16847a31507980945312bede915848159bd390b16b8e378b398e31a385d9180", "1372530cc0811d70071e50640281aa8aaf96ee09c01281ccfead92296cb9dacf5054aa51dbea730e46239e709042a15d"),
-            // ("08459bd42a955d6e247fce6c81eda0ad9645f9e666d141a71f0afa3fbc509b2c58550fe077d073cc752493400399fddd", "169d35a8c6bb915ae910f4c6cde359622746b0c8b2b241b411d0e92ef991d3e6a7b0fafabb93c1de2e3997d6e362ce8a"),
-            // ("08c937d529c01ab2398b85b0bff6da465ed6265d4944dbbef7d383eea40157927082739c7b5417027d2225c6cb9d5ef0", "059047d83b5ea1ff7f0665b406acede27f233d3414055cbff25b37614b679f08fd6d807b5956edec6abad36c5321d99e"),
+            ("12897a9a513b12303a7f0f3a3cc7c838d16847a31507980945312bede915848159bd390b16b8e378b398e31a385d9180", "1372530cc0811d70071e50640281aa8aaf96ee09c01281ccfead92296cb9dacf5054aa51dbea730e46239e709042a15d"),
+            ("08459bd42a955d6e247fce6c81eda0ad9645f9e666d141a71f0afa3fbc509b2c58550fe077d073cc752493400399fddd", "169d35a8c6bb915ae910f4c6cde359622746b0c8b2b241b411d0e92ef991d3e6a7b0fafabb93c1de2e3997d6e362ce8a"),
+            ("08c937d529c01ab2398b85b0bff6da465ed6265d4944dbbef7d383eea40157927082739c7b5417027d2225c6cb9d5ef0", "059047d83b5ea1ff7f0665b406acede27f233d3414055cbff25b37614b679f08fd6d807b5956edec6abad36c5321d99e"),
         ];
 
         for i in 0..msgs.len() {

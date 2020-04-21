@@ -2,6 +2,7 @@
 - Start work on G2
 - Fix doc_cfg issue
 - Add benchmarks
+- Fix for 32-bit builds e.g. WASM
 
 # Version 0.0.4
 - Allow G1.0 to be public
