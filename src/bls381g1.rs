@@ -462,8 +462,6 @@ fn map_to_curve_simple_swu(u: BIG) -> (BIG, BIG) {
     y_neg.norm();
     y_neg.cmove(&y, e3);
 
-    println!("x = {}", x.to_hex());
-    println!("y = {}", y_neg.to_hex());
     (x, y_neg)
 }
 
