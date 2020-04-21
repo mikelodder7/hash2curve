@@ -147,7 +147,10 @@ impl G1 {
     /// Serialize the point to uncompressed lower hex string
     /// The x-coordinate followed by the y-coordinate
     pub fn encode_to_hex_uncompressed(&self) -> String {
-        String::from_utf8(subtle_encoding::hex::encode(&self.to_bytes_uncompressed()[..])).unwrap()
+        String::from_utf8(subtle_encoding::hex::encode(
+            &self.to_bytes_uncompressed()[..],
+        ))
+        .unwrap()
     }
 
     /// Convenience method when x and y are supplied separately
@@ -230,7 +233,7 @@ impl PartialEq<[u8]> for G1 {
         match other.len() {
             G1::COMPRESSED_BYTES => self.eq(array_ref![other, 0, G1::COMPRESSED_BYTES]),
             G1::UNCOMPRESSED_BYTES => self.eq(array_ref![other, 0, G1::UNCOMPRESSED_BYTES]),
-            _ => false
+            _ => false,
         }
     }
 }
