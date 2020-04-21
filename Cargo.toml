@@ -5,7 +5,6 @@ description = "A suite of hash to curve ECC algorithms"
 documentation = "https://docs.rs/hash2curve"
 edition = "2018"
 exclude = [
-    "benches/**",
     "bin/**",
     "Cargo.lock",
     ".github/**",
