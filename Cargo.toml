@@ -44,7 +44,7 @@ path = "bin/bls381g1.rs"
 required-features = ["amcl-milagro"]
 
 [dependencies]
-amcl-milagro = { version = "3.2.6", optional = true  }
+amcl-milagro = { version = "3.2.6", optional = true }
 arrayref = "0.3.6"
 digest = "0.8.1"
 failure = "0.1.7"

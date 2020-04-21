@@ -1,7 +1,7 @@
-use amcl_milagro::bls381::big::BIG;
+use amcl::bls381::big::BIG;
 
 pub(crate) const MODULUS: BIG = BIG {
-    w: amcl_milagro::bls381::rom::MODULUS,
+    w: amcl::bls381::rom::MODULUS,
 };
 
 pub(crate) const PM1DIV2: BIG = BIG {

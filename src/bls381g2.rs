@@ -8,7 +8,7 @@
 //! I^2 = -1 mod p or (p - 1) mod p which means that `I`
 //! can be represented at sqrt(p - 1) mod p
 
-use amcl_milagro::bls381::{big::BIG, fp2::FP2};
+use amcl::bls381::{big::BIG, fp2::FP2};
 
 type L = U64;
 type TwoL = U128;

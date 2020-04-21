@@ -1,7 +1,7 @@
 //! See section C.3 in
 //! <https://datatracker.ietf.org/doc/draft-irtf-cfrg-hash-to-curve/?include_text=1>
 
-use amcl_milagro::bls381::{big::BIG, fp::FP, fp2::FP2};
+use amcl::bls381::{big::BIG, fp::FP, fp2::FP2};
 
 pub fn x_num() -> [FP2; 4] {
     [

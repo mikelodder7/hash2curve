@@ -8,8 +8,8 @@ use crate::error::HashingError;
 use crate::isogeny::bls381g1::*;
 use crate::{expand_message_xmd, expand_message_xof, DomainSeparationTag};
 use crate::{HashToCurveXmd, HashToCurveXof};
-use amcl_milagro::arch::Chunk;
-use amcl_milagro::bls381::{big::BIG, dbig::DBIG, ecp::ECP, rom};
+use amcl::arch::Chunk;
+use amcl::bls381::{big::BIG, dbig::DBIG, ecp::ECP, rom};
 use digest::generic_array::GenericArray;
 use digest::{
     generic_array::typenum::{marker_traits::Unsigned, U128, U32, U48, U64, U96},
@@ -623,7 +623,7 @@ fn field_elem_from_larger_bytearray(random_bytes: &[u8]) -> BIG {
 mod tests {
     use crate::bls381g1::{hash_to_field_xmd_nu, hash_to_field_xmd_ro, map_to_curve};
     use crate::DomainSeparationTag;
-    use amcl_milagro::bls381::{big::BIG, ecp::ECP};
+    use amcl::bls381::{big::BIG, ecp::ECP};
 
     #[test]
     fn map_to_curve_ro_tests() {
