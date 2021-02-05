@@ -1,60 +1,28 @@
 [package]
 authors = ["Michael Lodder <redmike7@gmail.com>"]
-categories = ["cryptography", "hash"]
-description = "A suite of hash to curve ECC algorithms"
+categories = ["cryptography", "no-std"]
+description = "Traits and algorithms for hashing arbitrary values to curve group element"
 documentation = "https://docs.rs/hash2curve"
 edition = "2018"
 exclude = [
-    "bin/**",
     "Cargo.lock",
     ".github/**",
     ".gitignore",
     "rustfmt.toml",
-    "tests/**"
 ]
 license = "Apache-2.0"
 name = "hash2curve"
 readme = "README.md"
 repository = "https://github.com/mikelodder7/hash2curve"
-version = "0.0.6"
-
-[lib]
-name = "hash2curve"
-crate-type = ["rlib"]
-
-[badges]
-maintenance = { status = "experimental" }
-
-[profile.release]
-lto = true
+version = "0.1.0"
 
 [features]
 default = []
-bls = ["amcl-milagro/bls381"]
-nightly = []
-
-[[bench]]
-name = "bls381g1"
-harness = false
-
-[[bin]]
-name = "bls381g1"
-path = "bin/bls381g1.rs"
-required-features = ["amcl-milagro"]
+alloc = ["digest/alloc"]
+std = ["alloc", "digest/std"]
 
 [dependencies]
-amcl-milagro = { version = "3.2.6", optional = true }
-arrayref = "0.3.6"
-digest = "0.8.1"
-failure = "0.1.7"
-sha2 = "0.8.1"
-subtle = "2.2.2"
-subtle-encoding = "0.5.1"
-
-[dev-dependencies]
-criterion = "0.3.1"
-rand = "0.7.3"
-sha3 = "0.8.2"
+digest = "0.9"
 
 [package.metadata.docs.rs]
 all-features = true
